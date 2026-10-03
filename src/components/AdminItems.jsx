@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase, TWOFA } from '../supabase.js';
 import { timeAgo, hostOf } from '../lib.js';
-import { Icon, Empty, Avatar, Modal, useToast } from './ui.jsx';
+import { Icon, SearchBox, Empty, Avatar, Modal, useToast } from './ui.jsx';
 import { Favicon } from './ItemCard.jsx';
 import ItemForm from './ItemForm.jsx';
 import ShareModal, { effectiveUsers } from './ShareModal.jsx';
@@ -21,7 +21,7 @@ export default function AdminItems({ ctx }) {
   async function doDelete() {
     const { error } = await supabase.from('pm_items').delete().eq('id', del.id);
     if (error) return toast(error.message, 'err');
-    toast('Credential deleted');
+    toast('Login deleted');
     setDel(null);
     ctx.reload();
   }
@@ -30,21 +30,21 @@ export default function AdminItems({ ctx }) {
     <div className="page">
       <header className="page-head">
         <div>
-          <h1>Credentials</h1>
-          <p className="muted">Create logins, set the 2FA holder, and decide who can see each one.</p>
+          <h1>Manage logins</h1>
+          <p className="muted">Add company logins, assign the 2FA holder and control who can see each one.</p>
         </div>
         <div className="head-actions">
-          <div className="search"><Icon name="search" /><input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-          <button className="btn primary" onClick={() => setForm('new')}><Icon name="plus" /> New credential</button>
+          <SearchBox value={q} onChange={setQ} placeholder="Search logins" label="Search logins" />
+          <button className="btn primary" onClick={() => setForm('new')}><Icon name="plus" /> New login</button>
         </div>
       </header>
 
       {ctx.items.length === 0 ? (
-        <Empty icon="key" title="No credentials yet">Add your first shared login, then share it with members or teams.</Empty>
+        <Empty icon="key" title="No logins yet">Add a login, then share it with people or teams.</Empty>
       ) : (
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Credential</th><th>Username</th><th>2FA holder</th><th>Shared with</th><th>Updated</th><th /></tr></thead>
+            <thead><tr><th>Login</th><th>Username</th><th>2FA holder</th><th>Shared with</th><th>Updated</th><th /></tr></thead>
             <tbody>
               {items.map((i) => {
                 const grants = ctx.access.filter((a) => a.item_id === i.id);
@@ -75,9 +75,9 @@ export default function AdminItems({ ctx }) {
                     </td>
                     <td className="muted small">{timeAgo(i.updated_at)}</td>
                     <td className="row-actions">
-                      <button className="icon-btn" title="Share" onClick={() => setShare(i)}><Icon name="share" /></button>
-                      <button className="icon-btn" title="Edit" onClick={() => setForm(i)}><Icon name="edit" /></button>
-                      <button className="icon-btn danger" title="Delete" onClick={() => setDel(i)}><Icon name="trash" /></button>
+                      <button className="icon-btn" title="Share" aria-label="Share" onClick={() => setShare(i)}><Icon name="share" /></button>
+                      <button className="icon-btn" title="Edit" aria-label="Edit" onClick={() => setForm(i)}><Icon name="edit" /></button>
+                      <button className="icon-btn danger" title="Delete" aria-label="Delete" onClick={() => setDel(i)}><Icon name="trash" /></button>
                     </td>
                   </tr>
                 );
@@ -91,7 +91,7 @@ export default function AdminItems({ ctx }) {
         onSaved={(id) => { if (form === 'new') setTimeout(() => setShare({ id, title: 'new credential' }), 50); }} />}
       {share && <ShareModal ctx={ctx} item={ctx.items.find((x) => x.id === share.id) || share} onClose={() => setShare(null)} />}
       {del && (
-        <Modal title="Delete credential?" onClose={() => setDel(null)}
+        <Modal title="Delete login?" onClose={() => setDel(null)}
           footer={<><button className="btn ghost" onClick={() => setDel(null)}>Cancel</button><button className="btn danger" onClick={doDelete}>Delete</button></>}>
           <p><b>{del.title}</b> and all its sharing will be removed for everyone. The stored password is wiped.</p>
         </Modal>

@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { initials } from '../lib.js';
 
 const P = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -30,38 +30,75 @@ const paths = {
   calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>,
   download: <><path d="M12 4v12M6 10l6 6 6-6M4 20h16" /></>,
   file: <><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5z" /><path d="M14 3v5h5" /></>,
+  chevron: <><path d="M8 10l4 4 4-4" /></>,
+  chevronUp: <><path d="M8 14l4-4 4 4" /></>,
+  arrowRight: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
   dice: <><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8.5" cy="8.5" r="1" fill="currentColor" /><circle cx="15.5" cy="15.5" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /></>,
 };
 export function Icon({ name, size = 16, ...rest }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" {...P} {...rest}>{paths[name]}</svg>;
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false" {...P} strokeWidth={1.75} {...rest}>{paths[name]}</svg>;
 }
 
 export function Avatar({ name, size = 28 }) {
-  const hue = [...(name || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
-  return (
-    <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.38, background: `hsl(${hue} 70% 92%)`, color: `hsl(${hue} 55% 35%)` }}>
-      {initials(name)}
-    </span>
-  );
+  return <span className="avatar" aria-hidden="true" style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }}>{initials(name)}</span>;
+}
+
+function useDialog(onClose) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const prev = document.activeElement;
+    const el = ref.current;
+    const first = el?.querySelector('[autofocus], input:not([type=hidden]):not([disabled]), select, textarea, button:not(.dialog-close)');
+    (first || el)?.focus();
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
+      if (e.key === 'Tab' && el) {
+        const f = [...el.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+        if (!f.length) return;
+        const a = f[0], z = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === a) { e.preventDefault(); z.focus(); }
+        else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); }
+      }
+    };
+    el?.addEventListener('keydown', onKey);
+    return () => { el?.removeEventListener('keydown', onKey); prev?.focus?.(); };
+  }, []); // eslint-disable-line
+  return ref;
 }
 
 export function Modal({ title, onClose, children, footer, wide }) {
-  useEffect(() => {
-    const k = (e) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', k);
-    return () => window.removeEventListener('keydown', k);
-  }, [onClose]);
+  const ref = useDialog(onClose);
+  const id = useId();
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={'modal' + (wide ? ' wide' : '')}>
+      <div ref={ref} className={'modal' + (wide ? ' wide' : '')} role="dialog" aria-modal="true" aria-labelledby={id} tabIndex={-1}>
         <div className="modal-head">
-          <h3>{title}</h3>
-          <button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
+          <h3 id={id}>{title}</h3>
+          <button className="icon-btn dialog-close" onClick={onClose} aria-label="Close dialog"><Icon name="x" /></button>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
     </div>
+  );
+}
+
+export function Drawer({ title, header, onClose, children, footer }) {
+  const ref = useDialog(onClose);
+  const id = useId();
+  return (
+    <>
+      <div className="drawer-overlay" onMouseDown={onClose} />
+      <aside ref={ref} className="drawer" role="dialog" aria-modal="true" aria-labelledby={id} tabIndex={-1}>
+        <div className="drawer-head">
+          {header}
+          <h2 id={id} className="grow">{title}</h2>
+          <button className="icon-btn dialog-close" onClick={onClose} aria-label="Close panel"><Icon name="x" /></button>
+        </div>
+        <div className="drawer-body">{children}</div>
+        {footer && <div className="drawer-foot">{footer}</div>}
+      </aside>
+    </>
   );
 }
 
@@ -71,12 +108,14 @@ export function ToastProvider({ children }) {
   const push = useCallback((msg, type = 'ok') => {
     const id = Math.random();
     setToasts((t) => [...t, { id, msg, type }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), type === 'err' ? 5000 : 3000);
   }, []);
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="toasts">{toasts.map((t) => <div key={t.id} className={'toast ' + t.type}>{t.msg}</div>)}</div>
+      <div className="toasts" role="status" aria-live="polite">
+        {toasts.map((t) => <div key={t.id} className={'toast ' + t.type}><Icon name={t.type === 'err' ? 'x' : 'check'} size={15} />{t.msg}</div>)}
+      </div>
     </ToastCtx.Provider>
   );
 }
@@ -85,7 +124,7 @@ export const useToast = () => useContext(ToastCtx);
 export function Empty({ icon = 'lock', title, children }) {
   return (
     <div className="empty">
-      <div className="empty-icon"><Icon name={icon} size={22} /></div>
+      <div className="empty-icon"><Icon name={icon} size={18} /></div>
       <h4>{title}</h4>
       {children && <p>{children}</p>}
     </div>
@@ -93,5 +132,16 @@ export function Empty({ icon = 'lock', title, children }) {
 }
 
 export function RoleBadge({ role }) {
-  return <span className={'badge role-' + role}>{role === 'cofounder' ? 'co-founder' : ['cmo', 'cfo', 'cto'].includes(role) ? role.toUpperCase() : role}</span>;
+  const label = { cofounder: 'Co-founder', cmo: 'CMO', cfo: 'CFO', cto: 'CTO' }[role] || role;
+  return <span className={'badge role-' + role}>{label}</span>;
+}
+
+export function SearchBox({ value, onChange, placeholder, label = 'Search', shortcut = true }) {
+  return (
+    <div className="search" role="search">
+      <Icon name="search" />
+      <input type="search" aria-label={label} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} data-search />
+      {shortcut && !value && <kbd aria-hidden="true">/</kbd>}
+    </div>
+  );
 }

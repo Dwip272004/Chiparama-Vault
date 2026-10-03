@@ -33,15 +33,15 @@ export default function ItemForm({ ctx, item, onClose, onSaved }) {
     });
     setBusy(false);
     if (error) return toast(error.message, 'err');
-    toast(isNew ? 'Credential saved' : 'Changes saved');
+    toast(isNew ? 'Login saved' : 'Changes saved');
     await ctx.reload();
     onClose();
     onSaved?.(data);
   }
 
   return (
-    <Modal title={isNew ? 'New credential' : `Edit · ${item.title}`} onClose={onClose} wide
-      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : isNew ? 'Save & share' : 'Save changes'}</button></>}>
+    <Modal title={isNew ? 'New login' : `Edit ${item.title}`} onClose={onClose} wide
+      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : isNew ? 'Save and share' : 'Save changes'}</button></>}>
       <div className="form-grid">
         <label className="span2">Name<input value={f.title} onChange={set('title')} placeholder="e.g. LinkedIn Recruiter – Sales seat" autoFocus /></label>
         <label>Login link<input value={f.url} onChange={set('url')} placeholder="https://…" /></label>
@@ -51,8 +51,8 @@ export default function ItemForm({ ctx, item, onClose, onSaved }) {
           Password {!isNew && <span className="muted small">(leave blank to keep current)</span>}
           <div className="input-group">
             <input type={show ? 'text' : 'password'} value={f.password} onChange={set('password')} className="mono" autoComplete="new-password" />
-            <button type="button" className="icon-btn" title={show ? 'Hide' : 'Show'} onClick={() => setShow(!show)}><Icon name={show ? 'eyeOff' : 'eye'} /></button>
-            <button type="button" className="icon-btn" title="Generate strong password" onClick={() => { setF({ ...f, password: generatePassword() }); setShow(true); }}><Icon name="dice" /></button>
+            <button type="button" className="icon-btn" title={show ? 'Hide' : 'Show'} aria-label={show ? 'Hide password' : 'Show password'} onClick={() => setShow(!show)}><Icon name={show ? 'eyeOff' : 'eye'} /></button>
+            <button type="button" className="icon-btn" title="Generate strong password" aria-label="Generate strong password" onClick={() => { setF({ ...f, password: generatePassword() }); setShow(true); }}><Icon name="dice" /></button>
           </div>
           {f.password && <div className="meter"><div className={'bar s' + s} style={{ width: (s + 1) * 20 + '%' }} /><span>{STRENGTH[s]}</span></div>}
         </label>
@@ -60,8 +60,8 @@ export default function ItemForm({ ctx, item, onClose, onSaved }) {
       </div>
 
       <div className="section-box">
-        <div className="section-title"><Icon name="shield" /> Two-factor / OTP</div>
-        <p className="muted small">Who receives the OTP or has the authenticator? Teammates will see this so they know whom to ask.</p>
+        <div className="section-title"><Icon name="shield" /> Two-factor authentication</div>
+        <p className="muted small">Record who receives the code so teammates know whom to ask when they sign in.</p>
         <div className="form-grid">
           <label>2FA method
             <select value={f.twofa_type} onChange={set('twofa_type')}>

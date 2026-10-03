@@ -26,11 +26,11 @@ export default function Activity({ ctx }) {
   return (
     <div className="page">
       <header className="page-head">
-        <div><h1>Activity log</h1><p className="muted">Every reveal, copy, edit and sharing change.</p></div>
+        <div><h1>Activity log</h1><p className="muted">Password reveals, copies, edits and sharing changes.</p></div>
         <div className="head-actions">
           <select value={who} onChange={(e) => setWho(e.target.value)}><option value="">Everyone</option>{ctx.profiles.map((p) => <option key={p.id} value={p.id}>{p.full_name || p.email}</option>)}</select>
           <select value={kind} onChange={(e) => setKind(e.target.value)}><option value="">All actions</option>{Object.entries(LABELS).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}</select>
-          <button className="icon-btn" title="Refresh" onClick={load}><Icon name="refresh" /></button>
+          <button className="icon-btn" title="Refresh" aria-label="Refresh" onClick={load}><Icon name="refresh" /></button>
         </div>
       </header>
       {rows === null ? <div className="pad"><div className="spinner" /></div> : rows.length === 0 ? <Empty icon="activity" title="No activity yet" /> : (

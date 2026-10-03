@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, LEADER_ROLES } from '../supabase.js';
 import { generatePassword, copyText, timeAgo } from '../lib.js';
-import { Icon, Avatar, Modal, RoleBadge, useToast, Empty } from './ui.jsx';
+import { Icon, SearchBox, Avatar, Modal, RoleBadge, useToast, Empty } from './ui.jsx';
 
 export default function Members({ ctx }) {
   const toast = useToast();
@@ -28,9 +28,9 @@ export default function Members({ ctx }) {
   return (
     <div className="page">
       <header className="page-head">
-        <div><h1>Members</h1><p className="muted">Approve logins, manage roles and teams, and see exactly what each person can access.</p></div>
+        <div><h1>Members</h1><p className="muted">Approve accounts, set roles and teams, and review what each person can access.</p></div>
         <div className="head-actions">
-          <div className="search"><Icon name="search" /><input placeholder="Search people…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+          <SearchBox value={q} onChange={setQ} placeholder="Search people" label="Search people" />
           <button className="btn primary" onClick={() => setAdding(true)}><Icon name="plus" /> Add member</button>
         </div>
       </header>
@@ -75,7 +75,7 @@ export default function Members({ ctx }) {
                   <td>{holds(p.id) || <span className="muted">0</span>}</td>
                   <td className="row-actions">
                     <button className="btn small ghost" onClick={() => setViewing(p)}>Manage access</button>
-                    {!leader && !self && <button className="icon-btn danger" title="Deactivate" onClick={() => update(p, { active: false }, 'Member deactivated')}><Icon name="logout" /></button>}
+                    {!leader && !self && <button className="icon-btn danger" title="Deactivate" aria-label="Deactivate" onClick={() => update(p, { active: false }, 'Member deactivated')}><Icon name="logout" /></button>}
                   </td>
                 </tr>
               );
@@ -200,7 +200,7 @@ function MemberAccess({ ctx, person, onClose }) {
               <div className="grow"><b>{r.title}</b><div className="muted small">{r.category}{r.expires_at ? ` · until ${new Date(r.expires_at).toLocaleDateString()}` : ''}</div></div>
               <span className={'tag' + (r.via === 'Direct' ? ' blue' : '')}>{r.via}</span>
               <span className={'perm perm-' + r.permission}>{r.permission === 'edit' ? 'Can edit' : 'View only'}</span>
-              {r.via === 'Direct' ? <button className="icon-btn danger" title="Remove direct access" onClick={() => revokeDirect(r.item_id)}><Icon name="trash" /></button> : <span style={{ width: 30 }} />}
+              {r.via === 'Direct' ? <button className="icon-btn danger" title="Remove direct access" aria-label="Remove direct access" onClick={() => revokeDirect(r.item_id)}><Icon name="trash" /></button> : <span style={{ width: 30 }} />}
             </div>
           ))}
         </div>

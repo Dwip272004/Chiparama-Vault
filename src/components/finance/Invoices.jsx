@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { supabase } from '../../supabase.js';
-import { Icon, Empty, Modal, useToast } from '../ui.jsx';
+import { Icon, SearchBox, Empty, Modal, useToast } from '../ui.jsx';
 import { StatusPill } from './charts.jsx';
 import InvoiceForm from './InvoiceForm.jsx';
 import { INV_STATUS, fmtINR, fmtMoney, fmtDate, relDays, invStatus, toCSV, download } from '../../finance.js';
@@ -65,7 +65,7 @@ export default function Invoices({ ctx }) {
       </div>
       <div className="toolbar">
         <div className="filters">
-          <div className="search"><Icon name="search" /><input placeholder="Search vendor, invoice #, ref…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+          <SearchBox value={q} onChange={setQ} placeholder="Search vendor, invoice #, ref…" label="Search vendor, invoice #, ref…" />
           <select value={month} onChange={(e) => setMonth(e.target.value)} className="narrow">
             <option value="">All months</option>
             {months.map((m) => <option key={m} value={m}>{new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</option>)}
@@ -92,11 +92,11 @@ export default function Invoices({ ctx }) {
                     <td className="num"><b>{fmtINR(i.total_inr)}</b></td>
                     <td><StatusPill tone={INV_STATUS[st].tone}>{INV_STATUS[st].label}</StatusPill>{i.paid_on && <div className="muted xsmall">{fmtDate(i.paid_on)}</div>}</td>
                     <td className="row-actions">
-                      {i.file_path && <button className="icon-btn" title="Open invoice file" onClick={() => openFile(i)}><Icon name="file" /></button>}
+                      {i.file_path && <button className="icon-btn" title="Open invoice file" aria-label="Open invoice file" onClick={() => openFile(i)}><Icon name="file" /></button>}
                       {isFinance && <>
                         {['pending', 'overdue', 'draft'].includes(st) && <button className="btn small ghost" onClick={() => markPaid(i)}>Mark paid</button>}
-                        <button className="icon-btn" title="Edit" onClick={() => setForm(i)}><Icon name="edit" /></button>
-                        <button className="icon-btn danger" title="Delete" onClick={() => setDel(i)}><Icon name="trash" /></button>
+                        <button className="icon-btn" title="Edit" aria-label="Edit" onClick={() => setForm(i)}><Icon name="edit" /></button>
+                        <button className="icon-btn danger" title="Delete" aria-label="Delete" onClick={() => setDel(i)}><Icon name="trash" /></button>
                       </>}
                     </td>
                   </tr>

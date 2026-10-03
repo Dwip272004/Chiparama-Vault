@@ -94,7 +94,7 @@ export default function ShareModal({ ctx, item, onClose }) {
                   <option value="view">Can view</option>
                   <option value="edit">Can edit</option>
                 </select>
-                <button className="icon-btn danger" title="Remove access" onClick={() => remove(g)}><Icon name="trash" /></button>
+                <button className="icon-btn danger" title="Remove access" aria-label="Remove access" onClick={() => remove(g)}><Icon name="trash" /></button>
               </div>
             );
           })}

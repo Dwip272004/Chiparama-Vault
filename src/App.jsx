@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, ADMIN_ROLES } from './supabase.js';
-import { ToastProvider, Icon, Avatar, RoleBadge } from './components/ui.jsx';
+import { ToastProvider, Icon, Avatar, RoleBadge, Modal, useToast } from './components/ui.jsx';
 import Login from './components/Login.jsx';
 import Vault from './components/Vault.jsx';
 import AdminItems from './components/AdminItems.jsx';
@@ -19,7 +19,7 @@ export default function App() {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
   }, []);
-  if (session === undefined) return <div className="center-screen"><div className="spinner" /></div>;
+  if (session === undefined) return <div className="center-screen" aria-busy="true"><div className="spinner" role="status" aria-label="Loading" /></div>;
   return <ToastProvider>{session ? <Shell session={session} /> : <Login />}</ToastProvider>;
 }
 
@@ -68,15 +68,27 @@ function Shell({ session }) {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <div className="center-screen"><div className="spinner" /></div>;
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey) return;
+      const t = e.target;
+      if (t.closest('input, textarea, select, [contenteditable=true], [role=dialog]')) return;
+      const box = document.querySelector('[data-search]');
+      if (box) { e.preventDefault(); box.focus(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  if (loading) return <div className="center-screen" aria-busy="true"><div className="spinner" role="status" aria-label="Loading" /></div>;
 
   if (!me || !me.active) {
     return (
       <div className="center-screen">
         <div className="card pending">
-          <div className="brand-mark big"><Icon name="lock" size={26} /></div>
-          <h2>Waiting for approval</h2>
-          <p>Your account <b>{session.user.email}</b> has been created. An admin needs to approve it before you can see any shared credentials.</p>
+          <div className="brand-mark big">C</div>
+          <h2>Account pending approval</h2>
+          <p><b>{session.user.email}</b> is registered but not yet activated. An administrator will approve it shortly; you'll then see the credentials shared with you.</p>
           <button className="btn ghost" onClick={() => supabase.auth.signOut()}><Icon name="logout" /> Sign out</button>
         </div>
       </div>
@@ -86,17 +98,17 @@ function Shell({ session }) {
   const pendingCount = data.profiles.filter((p) => !p.active).length;
   const unpaid = fin.invoices.filter((i) => invStatus(i) === 'overdue').length;
   const nav = [
-    { id: 'vault', label: 'My Vault', icon: 'lock', count: data.items.length },
+    { id: 'vault', label: 'Passwords', icon: 'lock', count: data.items.length },
     ...(isAdmin ? [
-      { section: 'Admin' },
-      { id: 'items', label: 'Credentials', icon: 'key' },
+      { section: 'Administration' },
+      { id: 'items', label: 'Manage logins', icon: 'key' },
       { id: 'members', label: 'Members', icon: 'users', count: pendingCount || null, alert: pendingCount > 0 },
-      { id: 'twofa', label: '2FA / OTP map', icon: 'phone' },
+      { id: 'twofa', label: '2FA holders', icon: 'phone' },
       { id: 'activity', label: 'Activity log', icon: 'activity' },
     ] : []),
     ...(fin.canView ? [
       { section: 'Finance' },
-      { id: 'spend', label: 'Spend overview', icon: 'chart' },
+      { id: 'spend', label: 'Overview', icon: 'chart' },
       { id: 'subs', label: 'Subscriptions', icon: 'card', count: fin.subs.filter((s) => ['active', 'trial'].includes(s.status)).length || null },
       { id: 'invoices', label: 'Invoices', icon: 'receipt', count: unpaid || null, alert: unpaid > 0 },
     ] : []),
@@ -106,31 +118,26 @@ function Shell({ session }) {
 
   return (
     <div className="layout">
-      <aside className="sidebar">
+      <a href="#main" className="skip-link">Skip to content</a>
+      <aside className="sidebar" aria-label="Primary">
         <div className="brand">
-          <div className="brand-mark"><Icon name="lock" size={18} /></div>
-          <div><b>Chiparama</b><span>Vault</span></div>
+          <div className="brand-mark" aria-hidden="true">C</div>
+          <div><b>Chiparama</b><span>Workspace</span></div>
         </div>
-        <nav>
+        <nav aria-label="Main navigation">
           {nav.map((n, i) => n.section
-            ? <div key={i} className="nav-section">{n.section}</div>
+            ? <div key={i} className="nav-section" role="presentation">{n.section}</div>
             : (
-              <button key={n.id} className={'nav-item' + (view === n.id ? ' active' : '')} onClick={() => setView(n.id)}>
+              <button key={n.id} className={'nav-item' + (view === n.id ? ' active' : '')} aria-current={view === n.id ? 'page' : undefined}
+                onClick={() => { setView(n.id); document.getElementById('main')?.focus(); }} title={n.label}>
                 <Icon name={n.icon} /> <span>{n.label}</span>
-                {n.count != null && <em className={n.alert ? 'alert' : ''}>{n.count}</em>}
+                {n.count != null && <em className={n.alert ? 'alert' : ''} aria-label={n.alert ? `${n.count} need attention` : `${n.count} items`}>{n.count}</em>}
               </button>
             ))}
         </nav>
-        <div className="me">
-          <Avatar name={me.full_name || me.email} size={34} />
-          <div className="me-info">
-            <b>{me.full_name || me.email}</b>
-            <RoleBadge role={me.role} />
-          </div>
-          <button className="icon-btn" title="Sign out" onClick={() => supabase.auth.signOut()}><Icon name="logout" /></button>
-        </div>
+        <AccountMenu me={me} email={session.user.email} />
       </aside>
-      <main className="main">
+      <main className="main" id="main" tabIndex={-1}>
         {view === 'vault' && <Vault ctx={ctx} />}
         {isAdmin && view === 'items' && <AdminItems ctx={ctx} />}
         {isAdmin && view === 'members' && <Members ctx={ctx} />}
@@ -141,5 +148,68 @@ function Shell({ session }) {
         {fin.canView && view === 'invoices' && <Invoices ctx={ctx} />}
       </main>
     </div>
+  );
+}
+
+function AccountMenu({ me, email }) {
+  const [open, setOpen] = useState(false);
+  const [pw, setPw] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const esc = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close); document.addEventListener('keydown', esc);
+    ref.current?.querySelector('.menu button')?.focus();
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const roleLabel = { cofounder: 'Co-founder', cmo: 'CMO', cfo: 'CFO', cto: 'CTO' }[me.role] || me.role[0].toUpperCase() + me.role.slice(1);
+  return (
+    <div className="me" ref={ref}>
+      {open && (
+        <div className="menu" role="menu">
+          <div className="menu-head"><b>{me.full_name || email}</b><span>{email}</span></div>
+          <button role="menuitem" onClick={() => { setOpen(false); setPw(true); }}><Icon name="key" /> Change password</button>
+          <button role="menuitem" onClick={() => supabase.auth.signOut()}><Icon name="logout" /> Sign out</button>
+        </div>
+      )}
+      <button className="me-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Avatar name={me.full_name || me.email} size={30} />
+        <span className="me-info"><b>{me.full_name || me.email}</b><span>{roleLabel}</span></span>
+        <Icon name="chevronUp" />
+      </button>
+      {pw && <ChangePassword onClose={() => setPw(false)} />}
+    </div>
+  );
+}
+
+function ChangePassword({ onClose }) {
+  const toast = useToast();
+  const [a, setA] = useState('');
+  const [b, setB] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  async function save(e) {
+    e?.preventDefault();
+    if (a.length < 8) return setErr('Use at least 8 characters.');
+    if (a !== b) return setErr('The two passwords do not match.');
+    setBusy(true); setErr('');
+    const { error } = await supabase.auth.updateUser({ password: a });
+    setBusy(false);
+    if (error) return setErr(error.message);
+    toast('Password updated');
+    onClose();
+  }
+  return (
+    <Modal title="Change password" onClose={onClose}
+      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Update password'}</button></>}>
+      <form className="form-grid one" onSubmit={save}>
+        <label>New password<input type="password" autoComplete="new-password" value={a} onChange={(e) => setA(e.target.value)} autoFocus /></label>
+        <label>Confirm new password<input type="password" autoComplete="new-password" value={b} onChange={(e) => setB(e.target.value)} /></label>
+        {err && <div className="note err" role="alert">{err}</div>}
+        <p className="muted small">At least 8 characters. Avoid passwords you use elsewhere.</p>
+        <button type="submit" hidden />
+      </form>
+    </Modal>
   );
 }

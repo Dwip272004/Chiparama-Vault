@@ -15,11 +15,11 @@ export default function TwoFAMap({ ctx }) {
   return (
     <div className="page">
       <header className="page-head">
-        <div><h1>2FA / OTP map</h1><p className="muted">Who to ask for the code, at a glance. {withTfa.length} of {ctx.items.length} credentials use 2FA.</p></div>
+        <div><h1>2FA holders</h1><p className="muted">Who receives the verification code for each login. {withTfa.length} of {ctx.items.length} logins use 2FA.</p></div>
       </header>
 
       {unassigned.length > 0 && (
-        <div className="banner warn"><Icon name="shield" /><span><b>{unassigned.length}</b> credential{unassigned.length > 1 ? 's have' : ' has'} 2FA but no holder assigned: {unassigned.map((i) => i.title).join(', ')}</span></div>
+        <div className="banner warn"><Icon name="shield" /><span><b>{unassigned.length}</b> login{unassigned.length > 1 ? 's have' : ' has'} 2FA without a holder: {unassigned.map((i) => i.title).join(', ')}</span></div>
       )}
 
       {Object.keys(holders).length === 0 ? <Empty icon="phone" title="No 2FA holders yet">Set a 2FA method and holder when editing a credential.</Empty> : (
@@ -29,7 +29,7 @@ export default function TwoFAMap({ ctx }) {
               <div className="holder-head">
                 <Avatar name={h.name || h.email} size={40} />
                 <div><b>{h.name}</b><div className="muted small">{h.email}</div></div>
-                <span className="count">{h.items.length}</span>
+                <span className="count">{h.items.length} login{h.items.length === 1 ? '' : 's'}</span>
               </div>
               {h.items.map((i) => (
                 <div key={i.id} className="holder-item">

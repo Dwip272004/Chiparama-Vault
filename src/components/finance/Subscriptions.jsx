@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { supabase } from '../../supabase.js';
-import { Icon, Empty, Modal, Avatar, useToast } from '../ui.jsx';
+import { Icon, SearchBox, Empty, Modal, Avatar, useToast } from '../ui.jsx';
 import { StatusPill } from './charts.jsx';
 import InvoiceForm from './InvoiceForm.jsx';
 import {
@@ -65,7 +65,7 @@ export default function Subscriptions({ ctx }) {
 
       <div className="toolbar">
         <div className="filters">
-          <div className="search"><Icon name="search" /><input placeholder="Search platform, plan…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+          <SearchBox value={q} onChange={setQ} placeholder="Search platform, plan…" label="Search platform, plan…" />
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="narrow">
             <option value="running">Active & trial</option><option value="">All statuses</option>
             {Object.entries(SUB_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -103,9 +103,9 @@ export default function Subscriptions({ ctx }) {
                     <td className="num">{fmtINR(spentBySub[s.id] || 0)}</td>
                     <td className="row-actions">
                       {isFinance && <>
-                        <button className="icon-btn" title="Record invoice" onClick={() => setInvFor(s)}><Icon name="receipt" /></button>
-                        <button className="icon-btn" title="Edit" onClick={() => setForm(s)}><Icon name="edit" /></button>
-                        <button className="icon-btn danger" title="Delete" onClick={() => setDel(s)}><Icon name="trash" /></button>
+                        <button className="icon-btn" title="Record invoice" aria-label="Record invoice" onClick={() => setInvFor(s)}><Icon name="receipt" /></button>
+                        <button className="icon-btn" title="Edit" aria-label="Edit" onClick={() => setForm(s)}><Icon name="edit" /></button>
+                        <button className="icon-btn danger" title="Delete" aria-label="Delete" onClick={() => setDel(s)}><Icon name="trash" /></button>
                       </>}
                     </td>
                   </tr>

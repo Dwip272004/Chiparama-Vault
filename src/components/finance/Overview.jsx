@@ -162,10 +162,9 @@ export default function Overview({ ctx, go }) {
 
 function Stat({ label, value, sub, onClick }) {
   return (
-    <div className={'stat card' + (onClick ? ' clickable' : '')} onClick={onClick}>
-      <span className="stat-label">{label}</span>
-      <b className="stat-value">{value}</b>
-      <span className="stat-sub">{sub}</span>
-    </div>
+    React.createElement(onClick ? 'button' : 'div', { className: 'stat' + (onClick ? ' clickable' : ''), onClick },
+      <span className="stat-label">{label}</span>,
+      <b className="stat-value">{value}</b>,
+      <span className="stat-sub">{sub}</span>)
   );
 }
