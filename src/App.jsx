@@ -32,7 +32,7 @@ function Shell({ session }) {
   const [data, setData] = useState({ items: [], profiles: [], teams: [], teamMembers: [], access: [] });
   const [view, setView] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [fin, setFin] = useState({ canView: false, isFinance: false, subs: [], invoices: [], clientInvoices: [], clients: [], company: {} });
+  const [fin, setFin] = useState({ canView: false, isFinance: false, subs: [], invoices: [], clientInvoices: [], clients: [], company: {}, canViewPayroll: false, employees: [], payRuns: [] });
 
   const isAdmin = !!me && me.active && ADMIN_ROLES.includes(me.role);
   const [apr, setApr] = useState({ stages: [], queue: [], isApprover: false });
@@ -68,8 +68,8 @@ function Shell({ session }) {
   }, [session.user.id]); // eslint-disable-line
 
   const loadFin = useCallback(async () => {
-    const [{ data: canView }, { data: isFinance }] = await Promise.all([supabase.rpc('inv_can_view'), supabase.rpc('inv_is_finance')]);
-    let next = { canView: !!canView, isFinance: !!isFinance, subs: [], invoices: [], clientInvoices: [], clients: [], company: {} };
+    const [{ data: canView }, { data: isFinance }, { data: canPay }] = await Promise.all([supabase.rpc('inv_can_view'), supabase.rpc('inv_is_finance'), supabase.rpc('inv_can_view_payroll')]);
+    let next = { canView: !!canView, isFinance: !!isFinance, canViewPayroll: !!canPay, subs: [], invoices: [], clientInvoices: [], clients: [], company: {}, employees: [], payRuns: [] };
     if (canView) {
       const [subs, invoices, ci, clients, company] = await Promise.all([
         supabase.from('inv_subscriptions').select('*').order('platform'),
@@ -79,6 +79,13 @@ function Shell({ session }) {
         supabase.from('inv_company').select('*').eq('id', 1).maybeSingle(),
       ]);
       next = { ...next, subs: subs.data || [], invoices: invoices.data || [], clientInvoices: ci.data || [], clients: clients.data || [], company: company.data || {} };
+    }
+    if (canPay) {
+      const [emps, runs] = await Promise.all([
+        supabase.from('pay_employees').select('*').order('name'),
+        supabase.from('pay_runs').select('*').order('month', { ascending: false }).limit(1000),
+      ]);
+      next = { ...next, employees: emps.data || [], payRuns: runs.data || [] };
     }
     setFin(next);
     return next;
@@ -132,7 +139,7 @@ function Shell({ session }) {
       { section: 'Finance' },
       { id: 'spend', label: 'Overview', icon: 'chart' },
       { id: 'billing', label: 'Client invoices', icon: 'file', count: clientOverdue || null, alert: clientOverdue > 0 },
-      { id: 'subs', label: 'Subscriptions', icon: 'card', count: fin.subs.filter((s) => ['active', 'trial'].includes(s.status)).length || null },
+      { id: 'subs', label: fin.canViewPayroll ? 'Subs & salaries' : 'Subscriptions', icon: 'card', count: fin.subs.filter((s) => ['active', 'trial'].includes(s.status)).length || null },
       { id: 'invoices', label: 'Vendor invoices', icon: 'receipt', count: unpaid || null, alert: unpaid > 0 },
     ] : []),
   ];
