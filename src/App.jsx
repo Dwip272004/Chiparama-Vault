@@ -10,6 +10,7 @@ import Activity from './components/Activity.jsx';
 import Overview from './components/finance/Overview.jsx';
 import Subscriptions from './components/finance/Subscriptions.jsx';
 import Invoices from './components/finance/Invoices.jsx';
+import ClientInvoices, { outStatus } from './components/finance/ClientInvoices.jsx';
 import { invStatus } from './finance.js';
 
 export default function App() {
@@ -28,7 +29,7 @@ function Shell({ session }) {
   const [data, setData] = useState({ items: [], profiles: [], teams: [], teamMembers: [], access: [] });
   const [view, setView] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [fin, setFin] = useState({ canView: false, isFinance: false, subs: [], invoices: [] });
+  const [fin, setFin] = useState({ canView: false, isFinance: false, subs: [], invoices: [], clientInvoices: [], clients: [], company: {} });
 
   const isAdmin = !!me && me.active && ADMIN_ROLES.includes(me.role);
 
@@ -54,13 +55,16 @@ function Shell({ session }) {
 
   const loadFin = useCallback(async () => {
     const [{ data: canView }, { data: isFinance }] = await Promise.all([supabase.rpc('inv_can_view'), supabase.rpc('inv_is_finance')]);
-    let next = { canView: !!canView, isFinance: !!isFinance, subs: [], invoices: [] };
+    let next = { canView: !!canView, isFinance: !!isFinance, subs: [], invoices: [], clientInvoices: [], clients: [], company: {} };
     if (canView) {
-      const [subs, invoices] = await Promise.all([
+      const [subs, invoices, ci, clients, company] = await Promise.all([
         supabase.from('inv_subscriptions').select('*').order('platform'),
         supabase.from('inv_invoices').select('*').order('invoice_date', { ascending: false }),
+        supabase.from('inv_client_invoices').select('*').order('issue_date', { ascending: false }).order('invoice_number', { ascending: false }),
+        supabase.from('inv_clients').select('*').order('name'),
+        supabase.from('inv_company').select('*').eq('id', 1).maybeSingle(),
       ]);
-      next = { ...next, subs: subs.data || [], invoices: invoices.data || [] };
+      next = { ...next, subs: subs.data || [], invoices: invoices.data || [], clientInvoices: ci.data || [], clients: clients.data || [], company: company.data || {} };
     }
     setFin(next);
     return next;
@@ -97,6 +101,7 @@ function Shell({ session }) {
 
   const pendingCount = data.profiles.filter((p) => !p.active).length;
   const unpaid = fin.invoices.filter((i) => invStatus(i) === 'overdue').length;
+  const clientOverdue = fin.clientInvoices.filter((i) => outStatus(i) === 'overdue').length;
   const nav = [
     { id: 'vault', label: 'Passwords', icon: 'lock', count: data.items.length },
     ...(isAdmin ? [
@@ -109,8 +114,9 @@ function Shell({ session }) {
     ...(fin.canView ? [
       { section: 'Finance' },
       { id: 'spend', label: 'Overview', icon: 'chart' },
+      { id: 'billing', label: 'Client invoices', icon: 'file', count: clientOverdue || null, alert: clientOverdue > 0 },
       { id: 'subs', label: 'Subscriptions', icon: 'card', count: fin.subs.filter((s) => ['active', 'trial'].includes(s.status)).length || null },
-      { id: 'invoices', label: 'Invoices', icon: 'receipt', count: unpaid || null, alert: unpaid > 0 },
+      { id: 'invoices', label: 'Vendor invoices', icon: 'receipt', count: unpaid || null, alert: unpaid > 0 },
     ] : []),
   ];
 
@@ -146,6 +152,7 @@ function Shell({ session }) {
         {fin.canView && view === 'spend' && <Overview ctx={ctx} go={setView} />}
         {fin.canView && view === 'subs' && <Subscriptions ctx={ctx} />}
         {fin.canView && view === 'invoices' && <Invoices ctx={ctx} />}
+        {fin.canView && view === 'billing' && <ClientInvoices ctx={ctx} />}
       </main>
     </div>
   );

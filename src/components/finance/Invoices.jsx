@@ -52,7 +52,7 @@ export default function Invoices({ ctx }) {
   return (
     <div className="page wide">
       <header className="page-head">
-        <div><h1>Invoices</h1><p className="muted">{isFinance ? 'Record and update invoices. Leadership sees these instantly.' : 'Read-only. Invoices are managed by Finance.'}</p></div>
+        <div><h1>Vendor invoices</h1><p className="muted">{isFinance ? 'Record and update invoices. Leadership sees these instantly.' : 'Read-only. Invoices are managed by Finance.'}</p></div>
         <div className="head-actions">
           <button className="btn ghost" onClick={exportCSV}><Icon name="download" /> CSV</button>
           {isFinance && <button className="btn primary" onClick={() => setForm('new')}><Icon name="plus" /> Record invoice</button>}
