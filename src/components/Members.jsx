@@ -109,7 +109,7 @@ function AddMember({ ctx, onClose }) {
   }
 
   if (done) {
-    const text = `Chiparama Vault login\nLink: ${window.location.origin}\nEmail: ${done.email}\nTemporary password: ${done.password}`;
+    const text = `Chiplabs Workspace login\nLink: ${window.location.origin}\nEmail: ${done.email}\nTemporary password: ${done.password}`;
     return (
       <Modal title="Member added" onClose={onClose} footer={<button className="btn primary" onClick={onClose}>Done</button>}>
         <p>Share these sign-in details with <b>{done.full_name || done.email}</b> privately (ask them to change the password later).</p>

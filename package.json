@@ -1,5 +1,5 @@
 {
-  "name": "chiparama-pass-manager",
+  "name": "chiplabs-pass-manager",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -13,7 +13,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "jspdf": "^4.2.1",
-    "jspdf-autotable": "^5.0.8"
+    "jspdf-autotable": "^5.0.8",
+    "pdfjs-dist": "4.10.38"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

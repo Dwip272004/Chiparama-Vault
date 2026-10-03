@@ -128,7 +128,7 @@ function Shell({ session }) {
       <aside className="sidebar" aria-label="Primary">
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">C</div>
-          <div><b>Chiparama</b><span>Workspace</span></div>
+          <div><b>Chiplabs</b><span>Workspace</span></div>
         </div>
         <nav aria-label="Main navigation">
           {nav.map((n, i) => n.section

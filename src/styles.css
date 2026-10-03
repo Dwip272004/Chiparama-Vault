@@ -1,4 +1,4 @@
-/* ============ Chiparama Workspace — design tokens ============ */
+/* ============ Chiplabs Workspace — design tokens ============ */
 :root {
   --bg: #f6f6f4;
   --panel: #ffffff;
@@ -422,3 +422,35 @@ table.mini tr.total td { font-weight: 600; border-bottom: none; }
   .items-desc { grid-column: 1 / -1; }
 }
 .items-head .r { line-height: normal; }
+
+/* ============ invoice viewer ============ */
+.viewer { position: fixed; inset: 0; z-index: 45; background: #e9e9e6; display: flex; flex-direction: column; animation: fade .12s; }
+.viewer-bar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.viewer-bar a.btn { text-decoration: none; }
+.viewer-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.viewer-title span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-body { flex: 1; display: flex; min-height: 0; }
+.viewer-doc { flex: 1; display: flex; flex-direction: column; padding: 16px; min-width: 0; overflow-y: auto; }
+.viewer-doc iframe { flex: 1; width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow-pop); }
+.viewer-fallback { text-align: center; padding-top: 8px; }
+.viewer-side { width: 320px; flex: none; background: var(--panel); border-left: 1px solid var(--line); padding: 18px; overflow-y: auto; }
+.viewer-side h4 { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 18px 0 4px; }
+.vw-status { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.vw-amount { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; }
+.vw-amount span { color: var(--muted); font-size: 13px; }
+.vw-amount b { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.vw-amount.sub b { font-size: 14px; color: var(--critical); }
+.vw-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line-2); font-size: 13px; }
+.vw-row span { color: var(--muted); flex: none; }
+.vw-row b { font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+.vw-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+@media (max-width: 860px) {
+  .viewer-body { flex-direction: column; overflow-y: auto; }
+  .viewer-doc { min-height: 70vh; padding: 10px; }
+  .viewer-side { width: 100%; border-left: none; border-top: 1px solid var(--line); }
+}
+
+.pdf-pages { width: 100%; }
+.pdf-pages-inner { display: flex; flex-direction: column; align-items: center; gap: 16px; padding-bottom: 16px; }
+.pdf-page { background: #fff; box-shadow: var(--shadow-pop); border-radius: 2px; max-width: 100%; height: auto; }
+.print-frame { position: absolute; width: 0; height: 0; border: 0; visibility: hidden; }

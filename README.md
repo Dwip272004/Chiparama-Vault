@@ -1,6 +1,6 @@
-# Chiparama Vault — team password manager
+# Chiplabs Workspace — team password manager
 
-React + Vite front end on the **Chiparama Project Hub** Supabase project (`kphlxmvlqyrzrmalthgj`).
+React + Vite front end on the Supabase project `kphlxmvlqyrzrmalthgj` (shared with Project Hub; the dashboard may still show its old "Chiparama Project Hub" name until renamed in Supabase settings).
 It reuses that project's logins, `profiles` (roles + active flag), `teams` and `team_members`.
 
 ## Run
@@ -18,7 +18,7 @@ npm run build      # static files in dist/ (deploy to Vercel/Netlify/any static 
 | member (approved) | only credentials shared with them or their team | reveal/copy; edit if granted **Can edit** |
 | new signup (not approved) | nothing | waits for admin approval |
 
-`dwiplahare24@gmail.com` is auto-made admin when it signs up. `dwip@chiparama.com` is already founder.
+Founder: saurabh@chiplabs.tech. Admins include admin@chiplabs.tech and dwip@chiplabs.tech. `dwiplahare24@gmail.com` is auto-made admin if it signs up.
 
 ## Database (pm_* objects)
 - `pm_items` — title, link, username, category, notes, **2FA method / holder / where the OTP goes**. The password is stored encrypted in **Supabase Vault** (`secret_id`), never in the table.
@@ -29,8 +29,8 @@ npm run build      # static files in dist/ (deploy to Vercel/Netlify/any static 
 - RLS on all three tables; inserts/updates to items only via RPC.
 
 ## Finance: subscriptions & invoices
-- **Who can edit:** only logins listed in `inv_finance_editors` (seeded with `finance@chiparama.com`). Add another with
-  `insert into inv_finance_editors(email) values ('someone@chiparama.com');`
+- **Who can edit:** only logins listed in `inv_finance_editors` (seeded with `finance@chiplabs.tech`). Add another with
+  `insert into inv_finance_editors(email) values ('someone@chiplabs.tech');`
 - **Who can view:** founder, co-founder, CMO, CFO, CTO (+ finance). Everyone else never sees the Finance menu, and the database refuses the rows (RLS).
 - CFO / CTO are new roles — only a founder can assign them (Members → role dropdown).
 - `inv_subscriptions` — platform, plan, category, billing cycle (monthly / quarterly / half-yearly / annual / one-time), amount + currency + FX → INR, seats, subscribed on, next billing date (auto-calculated if left blank), expiry, auto-renew, status, owner, team, linked vault login.

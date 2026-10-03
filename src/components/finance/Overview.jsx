@@ -61,7 +61,7 @@ export default function Overview({ ctx, go }) {
       <div className="page">
         <header className="page-head"><div><h1>Spend overview</h1><p className="muted">Tools, platforms and subscriptions — what we pay and when.</p></div></header>
         <Empty icon="chart" title="No subscriptions or invoices yet">
-          {ctx.fin.isFinance ? 'Start by adding the tools you pay for under Subscriptions, then record invoices against them.' : 'Finance (finance@chiparama.com) will add subscriptions and invoices here.'}
+          {ctx.fin.isFinance ? 'Start by adding the tools you pay for under Subscriptions, then record invoices against them.' : 'Finance (finance@chiplabs.tech) will add subscriptions and invoices here.'}
         </Empty>
       </div>
     );

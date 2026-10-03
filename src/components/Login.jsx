@@ -3,7 +3,7 @@ import { supabase } from '../supabase.js';
 import { Icon } from './ui.jsx';
 
 const COPY = {
-  signin: { title: 'Sign in', sub: 'Use your Chiparama work email.', cta: 'Sign in' },
+  signin: { title: 'Sign in', sub: 'Use your Chiplabs work email.', cta: 'Sign in' },
   signup: { title: 'Request access', sub: 'An administrator approves new accounts.', cta: 'Request access' },
   reset: { title: 'Reset password', sub: "Enter your email and we'll send a reset link.", cta: 'Send reset link' },
 };
@@ -40,7 +40,7 @@ export default function Login() {
       <form className="login-card" onSubmit={submit} noValidate={false}>
         <div className="login-brand">
           <div className="brand-mark" aria-hidden="true">C</div>
-          <div><b>Chiparama</b><br /><span>Workspace</span></div>
+          <div><b>Chiplabs</b><br /><span>Workspace</span></div>
         </div>
         <h2>{c.title}</h2>
         <p className="sub">{c.sub}</p>
@@ -64,7 +64,7 @@ export default function Login() {
             : <a onClick={() => go('signin')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && go('signin')}>← Back to sign in</a>}
         </div>
       </form>
-      <p className="login-foot">For Chiparama staff only. Activity is logged.</p>
+      <p className="login-foot">For Chiplabs Solutions Pvt Ltd staff only. Activity is logged.</p>
     </main>
   );
 }

@@ -13,6 +13,7 @@ export default function Invoices({ ctx }) {
   const [month, setMonth] = useState('');
   const [form, setForm] = useState(null);
   const [del, setDel] = useState(null);
+  const [file, setFile] = useState(null); // { inv, url }
 
   const months = useMemo(() => [...new Set(invoices.map((i) => i.invoice_date.slice(0, 7)))].sort().reverse(), [invoices]);
   const rows = invoices.filter((i) => {
@@ -25,9 +26,9 @@ export default function Invoices({ ctx }) {
   const counts = Object.fromEntries(Object.keys(INV_STATUS).map((k) => [k, invoices.filter((i) => invStatus(i) === k).length]));
 
   async function openFile(i) {
-    const { data, error } = await supabase.storage.from('invoices').createSignedUrl(i.file_path, 120);
+    const { data, error } = await supabase.storage.from('invoices').createSignedUrl(i.file_path, 900);
     if (error) return toast(error.message, 'err');
-    window.open(data.signedUrl, '_blank');
+    setFile({ inv: i, url: data.signedUrl });
   }
   async function markPaid(i) {
     const { error } = await supabase.from('inv_invoices').update({ status: 'paid', paid_on: new Date().toISOString().slice(0, 10) }).eq('id', i.id);
@@ -92,7 +93,7 @@ export default function Invoices({ ctx }) {
                     <td className="num"><b>{fmtINR(i.total_inr)}</b></td>
                     <td><StatusPill tone={INV_STATUS[st].tone}>{INV_STATUS[st].label}</StatusPill>{i.paid_on && <div className="muted xsmall">{fmtDate(i.paid_on)}</div>}</td>
                     <td className="row-actions">
-                      {i.file_path && <button className="icon-btn" title="Open invoice file" aria-label="Open invoice file" onClick={() => openFile(i)}><Icon name="file" /></button>}
+                      {i.file_path && <button className="icon-btn" title="View invoice file" aria-label="View invoice file" onClick={() => openFile(i)}><Icon name="file" /></button>}
                       {isFinance && <>
                         {['pending', 'overdue', 'draft'].includes(st) && <button className="btn small ghost" onClick={() => markPaid(i)}>Mark paid</button>}
                         <button className="icon-btn" title="Edit" aria-label="Edit" onClick={() => setForm(i)}><Icon name="edit" /></button>
@@ -109,6 +110,21 @@ export default function Invoices({ ctx }) {
       )}
 
       {form && <InvoiceForm ctx={ctx} invoice={form === 'new' ? null : form} onClose={() => setForm(null)} />}
+      {file && (
+        <div className="viewer" role="dialog" aria-modal="true" aria-label={`Invoice file for ${file.inv.platform}`} onKeyDown={(e) => e.key === 'Escape' && setFile(null)}>
+          <div className="viewer-bar">
+            <button className="btn small ghost" autoFocus onClick={() => setFile(null)}><Icon name="x" /> Close</button>
+            <div className="grow viewer-title"><b>{file.inv.platform}</b><span>{file.inv.invoice_number ? '#' + file.inv.invoice_number + ' · ' : ''}{fmtDate(file.inv.invoice_date)} · {fmtINR(file.inv.total_inr)}</span></div>
+            <a className="btn small ghost" href={file.url} target="_blank" rel="noreferrer"><Icon name="external" /> Open in new tab</a>
+            <a className="btn small primary" href={file.url + '&download='} rel="noreferrer"><Icon name="download" /> Download</a>
+          </div>
+          <div className="viewer-body"><div className="viewer-doc">
+            {/\.(png|jpe?g|webp|gif)$/i.test(file.inv.file_path)
+              ? <img src={file.url} alt={`Invoice from ${file.inv.platform}`} style={{ maxWidth: '100%', margin: '0 auto', background: '#fff', boxShadow: 'var(--shadow-pop)' }} />
+              : <iframe title={`Invoice file for ${file.inv.platform}`} src={file.url} />}
+          </div></div>
+        </div>
+      )}
       {del && (
         <Modal title="Delete invoice?" onClose={() => setDel(null)}
           footer={<><button className="btn ghost" onClick={() => setDel(null)}>Cancel</button><button className="btn danger" onClick={doDelete}>Delete</button></>}>

@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../supabase.js';
 import { Icon, Empty, Modal, SearchBox, useToast } from '../ui.jsx';
 import { StatusPill } from './charts.jsx';
+import PdfPages from './PdfPages.jsx';
 import { fmtDate, relDays, daysUntil, toCSV, download } from '../../finance.js';
-import { INVOICE_CURRENCIES, computeTotals, money, num, downloadInvoicePdf, previewInvoicePdf } from '../../invoicePdf.js';
+import { INVOICE_CURRENCIES, computeTotals, money, num, downloadInvoicePdf, previewInvoicePdf, buildInvoicePdf, invoiceFileName } from '../../invoicePdf.js';
 
 const STATUS = {
   draft: { label: 'Draft', tone: 'neutral' }, sent: { label: 'Sent', tone: 'info' }, partially_paid: { label: 'Part paid', tone: 'warning' },
@@ -26,6 +27,7 @@ export default function ClientInvoices({ ctx }) {
   const [editing, setEditing] = useState(null); // null | 'new' | invoice | { copyOf }
   const [companyOpen, setCompanyOpen] = useState(false);
   const [del, setDel] = useState(null);
+  const [viewId, setViewId] = useState(null);
 
   const rows = invoices.filter((i) => {
     if (status && outStatus(i) !== status) return false;
@@ -120,7 +122,7 @@ export default function ClientInvoices({ ctx }) {
               {rows.map((i) => {
                 const st = outStatus(i); const bal = Number(i.total) - Number(i.amount_paid || 0);
                 return (
-                  <tr key={i.id}>
+                  <tr key={i.id} className="clickable" onClick={() => setViewId(i.id)}>
                     <td className="nowrap"><b className="mono" style={{ fontSize: 13 }}>{i.invoice_number}</b>{i.po_number && <div className="muted xsmall">PO {i.po_number}</div>}</td>
                     <td>{i.client_name}<div className="muted xsmall">{i.service_period || i.client_country || ''}</div></td>
                     <td className="small nowrap">{fmtDate(i.issue_date)}</td>
@@ -128,7 +130,8 @@ export default function ClientInvoices({ ctx }) {
                     <td className="num"><b>{money(i.total, i.currency)}</b></td>
                     <td className="num">{bal > 0 && st !== 'cancelled' ? money(bal, i.currency) : <span className="faint">—</span>}</td>
                     <td><StatusPill tone={STATUS[st].tone}>{STATUS[st].label}</StatusPill></td>
-                    <td className="row-actions">
+                    <td className="row-actions" onClick={(e) => e.stopPropagation()}>
+                      <button className="btn small ghost" onClick={() => setViewId(i.id)} aria-label={`View ${i.invoice_number}`}><Icon name="eye" /> View</button>
                       <button className="btn small ghost" onClick={() => downloadInvoicePdf(i, company)} aria-label={`Download PDF of ${i.invoice_number}`}><Icon name="download" /> PDF</button>
                       {isFinance && <>
                         {['sent', 'partially_paid'].includes(i.status) && <button className="btn small ghost" onClick={() => markPaid(i)}>Mark paid</button>}
@@ -145,6 +148,10 @@ export default function ClientInvoices({ ctx }) {
         </div>
       )}
 
+      {viewId && invoices.find((x) => x.id === viewId) && (
+        <InvoiceViewer ctx={ctx} invoice={invoices.find((x) => x.id === viewId)} onClose={() => setViewId(null)}
+          onEdit={isFinance ? (inv) => { setViewId(null); setEditing(inv); } : null} onMarkPaid={isFinance ? markPaid : null} />
+      )}
       {companyOpen && <CompanyDetails ctx={ctx} onClose={() => setCompanyOpen(false)} />}
       {del && (
         <Modal title={`Delete ${del.invoice_number}?`} onClose={() => setDel(null)}
@@ -184,9 +191,14 @@ function InvoiceEditor({ ctx, initial, onClose }) {
   const setItem = (i, k, v) => setF((p) => ({ ...p, items: p.items.map((it, j) => (j === i ? { ...it, [k]: v } : it)) }));
   const calc = computeTotals({ ...f, tax_rate: showTax ? f.tax_rate : 0, amount_paid: f.status === 'paid' ? 0 : f.amount_paid });
   const invNo = isNew ? null : src.invoice_number;
+  const [nextNo, setNextNo] = useState(null);
+  useEffect(() => {
+    if (!isNew || !f.issue_date) return;
+    supabase.rpc('inv_next_invoice_number', { p_issue_date: f.issue_date }).then(({ data }) => setNextNo(data || null));
+  }, [isNew, f.issue_date]);
   const foreign = f.currency !== 'INR' || (f.client_country && !/^india$/i.test(f.client_country.trim()));
   const tncText = (f.tnc === 'domestic' ? company?.terms_domestic : f.tnc === 'international' ? company?.terms_international : '') || '';
-  const previewData = () => ({ ...f, tax_rate: showTax ? f.tax_rate : 0, tax_label: f.tax_label || 'Tax', invoice_number: invNo || 'DRAFT', amount_paid: f.status === 'paid' ? calc.total : f.amount_paid,
+  const previewData = () => ({ ...f, tax_rate: showTax ? f.tax_rate : 0, tax_label: f.tax_label || 'Tax', invoice_number: invNo || nextNo || 'DRAFT', amount_paid: f.status === 'paid' ? calc.total : f.amount_paid,
     items: f.items.filter((it) => it.description.trim() || Number(it.rate)) });
 
   function pickClient(id) {
@@ -245,7 +257,7 @@ function InvoiceEditor({ ctx, initial, onClose }) {
         <div>
           <button className="link-btn" onClick={onClose} style={{ marginBottom: 6 }}>← Client invoices</button>
           <h1>{isNew ? (initial.copyOf ? `New invoice (copy of ${initial.copyOf.invoice_number})` : 'New invoice') : `Edit ${invNo}`}</h1>
-          <p>{isNew ? 'The invoice number is assigned automatically when you save.' : 'Changes are saved to the same invoice number.'}</p>
+          <p>{isNew ? <>Will be numbered <b className="mono">{nextNo || 'CL/<FY>/<serial>'}</b> when saved (CL / financial year / serial).</> : 'Changes are saved to the same invoice number.'}</p>
         </div>
         <div className="head-actions">
           <button className="btn ghost" onClick={() => previewInvoicePdf(previewData(), company)}><Icon name="eye" /> Preview PDF</button>
@@ -399,7 +411,7 @@ function CompanyDetails({ ctx, onClose }) {
         {field('email', 'Billing email')}{field('phone', 'Phone')}
         {field('website', 'Website')}{field('tagline', 'Tagline')}
         {field('gstin', 'GSTIN (optional)')}{field('pan', 'PAN (optional)')}
-        {field('cin', 'CIN (optional)')}{field('invoice_prefix', 'Invoice number prefix (max 6 letters/digits)', { ph: 'CL → CL/26-27/001' })}
+        {field('cin', 'CIN (optional)')}<label>Invoice numbering<input value="CL / financial year / serial  (e.g. CL/26-27/001)" disabled /></label>
       </div>
       <div className="section-box">
         <div className="section-title"><Icon name="card" /> Bank details</div>
@@ -437,5 +449,77 @@ function CompanyDetails({ ctx, onClose }) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+// ---------------------------------------------------------------- read-only viewer
+function InvoiceViewer({ ctx, invoice: i, onClose, onEdit, onMarkPaid }) {
+  const { company } = ctx.fin;
+  const [url, setUrl] = useState(null);
+  const [blob, setBlob] = useState(null);
+  const frame = useRef(null);
+  const closeBtn = useRef(null);
+  useEffect(() => {
+    const b = buildInvoicePdf(i, company).output('blob');
+    const u = URL.createObjectURL(b);
+    setBlob(b); setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [i, company]);
+  useEffect(() => {
+    const prev = document.activeElement; closeBtn.current?.focus();
+    const k = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', k);
+    return () => { window.removeEventListener('keydown', k); prev?.focus?.(); };
+  }, [onClose]);
+  const st = outStatus(i);
+  const t = computeTotals(i);
+  const bal = Number(i.total) - Number(i.amount_paid || 0);
+  const by = ctx.profiles.find((p) => p.id === (i.updated_by || i.created_by));
+  const row = (k, v) => v ? <div className="vw-row"><span>{k}</span><b>{v}</b></div> : null;
+
+  return (
+    <div className="viewer" role="dialog" aria-modal="true" aria-label={`Invoice ${i.invoice_number}`}>
+      <div className="viewer-bar">
+        <button ref={closeBtn} className="btn small ghost" onClick={onClose}><Icon name="x" /> Close</button>
+        <div className="grow viewer-title"><b className="mono">{i.invoice_number}</b><span>{i.client_name}</span></div>
+        <button className="btn small ghost" onClick={() => frame.current?.contentWindow?.print()} disabled={!url}>Print</button>
+        <a className="btn small ghost" href={url || '#'} target="_blank" rel="noreferrer"><Icon name="external" /> Open in new tab</a>
+        <a className="btn small primary" href={url || '#'} download={invoiceFileName(i)}><Icon name="download" /> Download PDF</a>
+      </div>
+      <div className="viewer-body">
+        <div className="viewer-doc">
+          <PdfPages blob={blob} title={`Invoice ${i.invoice_number}`} />
+          {url && <iframe ref={frame} title="Print copy" src={url} className="print-frame" tabIndex={-1} aria-hidden="true" />}
+        </div>
+        <aside className="viewer-side" aria-label="Invoice summary">
+          <div className="vw-status"><StatusPill tone={STATUS[st].tone}>{STATUS[st].label}</StatusPill>
+            {st === 'overdue' && <span className="danger small">{relDays(i.due_date)}</span>}</div>
+          <div className="vw-amount"><span>Total</span><b>{money(i.total, i.currency)}</b></div>
+          {bal > 0 && st !== 'cancelled' && <div className="vw-amount sub"><span>Balance due</span><b>{money(bal, i.currency)}</b></div>}
+          <h4>Details</h4>
+          {row('Client', i.client_name)}
+          {row('Country', i.client_country)}
+          {row('Issued', fmtDate(i.issue_date))}
+          {row('Due', fmtDate(i.due_date))}
+          {row('Currency', `${i.currency} – ${INVOICE_CURRENCIES[i.currency]?.name || ''}`)}
+          {row('Service period', i.service_period)}
+          {row('PO / reference', i.po_number)}
+          {row('Line items', String((i.items || []).length))}
+          {t.discount ? row('Discount', num(t.discount, i.currency)) : null}
+          {Number(i.tax_rate) ? row(i.tax_label || 'Tax', `${Number(i.tax_rate)}%`) : null}
+          {row('Amount received', Number(i.amount_paid) ? money(i.amount_paid, i.currency) : null)}
+          {row('Paid on', i.paid_on ? fmtDate(i.paid_on) : null)}
+          {row('T&C page', i.tnc && i.tnc !== 'none' ? (i.tnc === 'international' ? 'International' : 'Domestic') : null)}
+          {row('GST export (LUT)', i.export_lut ? 'Yes' : null)}
+          {(i.updated_at || i.created_at) && <p className="muted xsmall" style={{ marginTop: 14 }}>Last updated {fmtDate(String(i.updated_at || i.created_at).slice(0, 10))}{by ? ` by ${by.full_name || by.email}` : ''}</p>}
+          {(onEdit || onMarkPaid) && (
+            <div className="vw-actions">
+              {onMarkPaid && ['sent', 'partially_paid'].includes(i.status) && <button className="btn ghost" onClick={() => onMarkPaid(i)}><Icon name="check" /> Mark paid</button>}
+              {onEdit && <button className="btn ghost" onClick={() => onEdit(i)}><Icon name="edit" /> Edit invoice</button>}
+            </div>
+          )}
+        </aside>
+      </div>
+    </div>
   );
 }
