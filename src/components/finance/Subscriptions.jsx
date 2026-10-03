@@ -3,12 +3,36 @@ import { supabase } from '../../supabase.js';
 import { Icon, SearchBox, Empty, Modal, Avatar, useToast } from '../ui.jsx';
 import { StatusPill } from './charts.jsx';
 import InvoiceForm from './InvoiceForm.jsx';
+import Payroll from './Payroll.jsx';
 import {
   CYCLES, SUB_STATUS, CURRENCIES, fmtINR, fmtMoney, fmtDate, relDays, daysUntil, monthlyEq, isRunning,
   countsAsSpend, toCSV, download,
 } from '../../finance.js';
 
 export default function Subscriptions({ ctx }) {
+  const [section, setSection] = useState('tools');
+  const canPay = ctx.fin.canViewPayroll;
+  const tabs = canPay ? (
+    <div className="seg" role="tablist" aria-label="Recurring costs" style={{ marginBottom: 16 }}>
+      <button role="tab" aria-selected={section === 'tools'} className={section === 'tools' ? 'on' : ''} onClick={() => setSection('tools')}>Tools & subscriptions</button>
+      <button role="tab" aria-selected={section === 'salary'} className={section === 'salary' ? 'on' : ''} onClick={() => setSection('salary')}>Salaries</button>
+    </div>
+  ) : null;
+  if (canPay && section === 'salary') {
+    return (
+      <div className="page wide">
+        <header className="page-head">
+          <div><h1>Salaries</h1><p className="muted">Employee pay and monthly payouts. Visible to Founder, Co-founder, CFO and Finance only.</p></div>
+        </header>
+        {tabs}
+        <Payroll ctx={ctx} />
+      </div>
+    );
+  }
+  return <ToolSubscriptions ctx={ctx} tabs={tabs} />;
+}
+
+function ToolSubscriptions({ ctx, tabs }) {
   const toast = useToast();
   const { subs, invoices, isFinance } = ctx.fin;
   const [q, setQ] = useState('');
@@ -62,6 +86,7 @@ export default function Subscriptions({ ctx }) {
           {isFinance && <button className="btn primary" onClick={() => setForm('new')}><Icon name="plus" /> Add subscription</button>}
         </div>
       </header>
+      {tabs}
 
       <div className="toolbar">
         <div className="filters">

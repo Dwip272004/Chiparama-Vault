@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Icon, Empty } from '../ui.jsx';
+import { payrollTotals } from './Payroll.jsx';
 import { MonthBars, RankBars, topN, StatusPill } from './charts.jsx';
 import {
   CYCLES, INV_STATUS, fmtINR, fmtCompact, fmtDate, relDays, daysUntil, monthlyEq, isRunning, invStatus,
@@ -90,6 +91,21 @@ export default function Overview({ ctx, go }) {
         <Stat label="Outstanding" value={fmtCompact(outstanding.reduce((s, i) => s + Number(i.total_inr), 0))}
           sub={overdue.length ? <span className="danger">{overdue.length} overdue</span> : `${outstanding.length} unpaid`} onClick={() => go('invoices')} />
       </div>
+
+      {ctx.fin.canViewPayroll && (() => {
+        const p = payrollTotals(ctx.fin.employees, ctx.fin.payRuns);
+        return (
+          <section aria-label="People cost" style={{ marginBottom: 18 }}>
+            <div className="card-head" style={{ marginBottom: 8 }}><h3>People cost</h3><span className="muted small">Salaries, kept separate from tools spend · visible to Founder, Co-founder, CFO & Finance</span></div>
+            <div className="stats" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 0 }}>
+              <Stat label="Monthly payroll" value={fmtINR(p.monthly)} sub={`${p.headcount} on payroll`} onClick={() => go('subs')} />
+              <Stat label="Annual payroll (CTC)" value={fmtCompact(p.annual)} sub="Active employees" />
+              <Stat label="Salaries paid this month" value={fmtINR(p.paidThisMonth)} sub={p.pendingThisMonth ? <span className="warn-text">{p.pendingThisMonth} payout{p.pendingThisMonth === 1 ? '' : 's'} pending</span> : 'All settled'} />
+              <Stat label="Total monthly cost" value={fmtINR(p.monthly + runMonthly)} sub={`Tools ${fmtCompact(runMonthly)} + payroll ${fmtCompact(p.monthly)}`} />
+            </div>
+          </section>
+        );
+      })()}
 
       <div className="fin-grid">
         <section className="card span-2">
