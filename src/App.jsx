@@ -12,6 +12,8 @@ import Subscriptions from './components/finance/Subscriptions.jsx';
 import Invoices from './components/finance/Invoices.jsx';
 import ClientInvoices, { outStatus } from './components/finance/ClientInvoices.jsx';
 import { invStatus } from './finance.js';
+import Approvals from './components/approvals/Approvals.jsx';
+import ApprovalStages from './components/approvals/ApprovalStages.jsx';
 
 export default function App() {
   const [session, setSession] = useState(undefined);
@@ -32,6 +34,15 @@ function Shell({ session }) {
   const [fin, setFin] = useState({ canView: false, isFinance: false, subs: [], invoices: [], clientInvoices: [], clients: [], company: {} });
 
   const isAdmin = !!me && me.active && ADMIN_ROLES.includes(me.role);
+  const [apr, setApr] = useState({ stages: [], queue: [], isApprover: false });
+  const loadApr = useCallback(async () => {
+    const [stages, queue, isApprover] = await Promise.all([
+      supabase.from('apr_stages').select('*').order('position'),
+      supabase.rpc('apr_my_queue'),
+      supabase.rpc('apr_is_any_approver'),
+    ]);
+    setApr({ stages: stages.data || [], queue: queue.data || [], isApprover: !!isApprover.data });
+  }, []);
 
   const load = useCallback(async () => {
     const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
@@ -48,7 +59,7 @@ function Shell({ session }) {
       items: items.data || [], profiles: profiles.data || [], teams: teams.data || [],
       teamMembers: teamMembers.data || [], access: access.data || [],
     });
-    const f = await loadFin();
+    const [f] = await Promise.all([loadFin(), loadApr()]);
     setView((v) => v || (f.canView && !(items.data || []).length ? 'spend' : 'vault'));
     setLoading(false);
   }, [session.user.id]); // eslint-disable-line
@@ -110,6 +121,11 @@ function Shell({ session }) {
       { id: 'members', label: 'Members', icon: 'users', count: pendingCount || null, alert: pendingCount > 0 },
       { id: 'twofa', label: '2FA holders', icon: 'phone' },
       { id: 'activity', label: 'Activity log', icon: 'activity' },
+      { id: 'stages', label: 'Approval stages', icon: 'shield' },
+    ] : []),
+    ...(apr.isApprover || fin.canView || isAdmin ? [
+      { section: 'Approvals' },
+      { id: 'approvals', label: 'Invoice approvals', icon: 'check', count: apr.queue.length || null, alert: apr.queue.length > 0 },
     ] : []),
     ...(fin.canView ? [
       { section: 'Finance' },
@@ -120,7 +136,7 @@ function Shell({ session }) {
     ] : []),
   ];
 
-  const ctx = { me, isAdmin, ...data, reload: load, fin: { ...fin, reload: loadFin } };
+  const ctx = { me, isAdmin, ...data, reload: load, fin: { ...fin, reload: loadFin }, apr: { ...apr, reload: loadApr } };
 
   return (
     <div className="layout">
@@ -149,6 +165,8 @@ function Shell({ session }) {
         {isAdmin && view === 'members' && <Members ctx={ctx} />}
         {isAdmin && view === 'twofa' && <TwoFAMap ctx={ctx} />}
         {isAdmin && view === 'activity' && <Activity ctx={ctx} />}
+        {isAdmin && view === 'stages' && <ApprovalStages ctx={ctx} />}
+        {view === 'approvals' && <Approvals ctx={ctx} />}
         {fin.canView && view === 'spend' && <Overview ctx={ctx} go={setView} />}
         {fin.canView && view === 'subs' && <Subscriptions ctx={ctx} />}
         {fin.canView && view === 'invoices' && <Invoices ctx={ctx} />}

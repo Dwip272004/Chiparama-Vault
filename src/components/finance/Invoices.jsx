@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../supabase.js';
 import { Icon, SearchBox, Empty, Modal, useToast } from '../ui.jsx';
 import { StatusPill } from './charts.jsx';
 import InvoiceForm from './InvoiceForm.jsx';
+import { ApprovalPill, ApprovalTimeline, ApprovalActions, useApproval } from '../approvals/shared.jsx';
 import { INV_STATUS, fmtINR, fmtMoney, fmtDate, relDays, invStatus, toCSV, download } from '../../finance.js';
 
 export default function Invoices({ ctx }) {
@@ -14,6 +15,12 @@ export default function Invoices({ ctx }) {
   const [form, setForm] = useState(null);
   const [del, setDel] = useState(null);
   const [file, setFile] = useState(null); // { inv, url }
+  const [aprFor, setAprFor] = useState(null);
+  const [openReqs, setOpenReqs] = useState({});
+  useEffect(() => {
+    supabase.from('apr_requests').select('*').eq('flow', 'vendor').in('state', ['in_review', 'returned'])
+      .then(({ data }) => setOpenReqs(Object.fromEntries((data || []).map((r) => [r.invoice_id, r]))));
+  }, [invoices, ctx.apr.queue]);
 
   const months = useMemo(() => [...new Set(invoices.map((i) => i.invoice_date.slice(0, 7)))].sort().reverse(), [invoices]);
   const rows = invoices.filter((i) => {
@@ -78,7 +85,7 @@ export default function Invoices({ ctx }) {
       {rows.length === 0 ? <Empty icon="receipt" title={invoices.length ? 'Nothing matches these filters' : 'No invoices yet'} /> : (
         <div className="table-wrap">
           <table className="table fin">
-            <thead><tr><th>Invoice</th><th>Date</th><th>Service period</th><th>Due</th><th className="num">Amount</th><th className="num">Tax</th><th className="num">Total (INR)</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>Invoice</th><th>Date</th><th>Service period</th><th>Due</th><th className="num">Amount</th><th className="num">Tax</th><th className="num">Total (INR)</th><th>Status</th><th>Approval</th><th /></tr></thead>
             <tbody>
               {rows.map((i) => {
                 const st = invStatus(i);
@@ -92,6 +99,7 @@ export default function Invoices({ ctx }) {
                     <td className="num muted">{Number(i.tax_amount) ? fmtMoney(i.tax_amount, i.currency) : '—'}</td>
                     <td className="num"><b>{fmtINR(i.total_inr)}</b></td>
                     <td><StatusPill tone={INV_STATUS[st].tone}>{INV_STATUS[st].label}</StatusPill>{i.paid_on && <div className="muted xsmall">{fmtDate(i.paid_on)}</div>}</td>
+                    <td><button className="link-btn" onClick={() => setAprFor(i)} aria-label={`Approval for ${i.platform}`}><ApprovalPill status={i.approval_status} req={openReqs[i.id]} /></button></td>
                     <td className="row-actions">
                       {i.file_path && <button className="icon-btn" title="View invoice file" aria-label="View invoice file" onClick={() => openFile(i)}><Icon name="file" /></button>}
                       {isFinance && <>
@@ -125,6 +133,7 @@ export default function Invoices({ ctx }) {
           </div></div>
         </div>
       )}
+      {aprFor && <VendorApproval ctx={ctx} inv={invoices.find((x) => x.id === aprFor.id) || aprFor} onClose={() => setAprFor(null)} />}
       {del && (
         <Modal title="Delete invoice?" onClose={() => setDel(null)}
           footer={<><button className="btn ghost" onClick={() => setDel(null)}>Cancel</button><button className="btn danger" onClick={doDelete}>Delete</button></>}>
@@ -132,5 +141,18 @@ export default function Invoices({ ctx }) {
         </Modal>
       )}
     </div>
+  );
+}
+
+function VendorApproval({ ctx, inv, onClose }) {
+  const [tick, setTick] = useState(0);
+  const apr = useApproval('vendor', inv.id, `${tick}-${inv.approval_status}`);
+  return (
+    <Modal title={`Approval · ${inv.platform}${inv.invoice_number ? ' #' + inv.invoice_number : ''}`} onClose={onClose} wide>
+      <p className="muted small" style={{ marginBottom: 12 }}>{fmtDate(inv.invoice_date)} · {fmtMoney(inv.total, inv.currency)}{inv.currency !== 'INR' ? ` (≈ ${fmtINR(inv.total_inr)})` : ''}</p>
+      <ApprovalActions flow="vendor" invoiceId={inv.id} approvalStatus={inv.approval_status} req={apr.req} me={ctx.me} isFinance={!!ctx.fin.isFinance}
+        stagesConfigured={ctx.apr.stages.some((s) => s.flow === 'vendor')} onDone={() => { setTick((t) => t + 1); ctx.fin.reload(); ctx.apr.reload(); }} />
+      <div style={{ marginTop: 14 }}><ApprovalTimeline req={apr.req} events={apr.events} profiles={ctx.profiles} me={ctx.me} /></div>
+    </Modal>
   );
 }

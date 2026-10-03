@@ -3,6 +3,7 @@ import { supabase } from '../../supabase.js';
 import { Icon, Empty, Modal, SearchBox, useToast } from '../ui.jsx';
 import { StatusPill } from './charts.jsx';
 import PdfPages from './PdfPages.jsx';
+import { ApprovalPill, ApprovalTimeline, ApprovalActions, useApproval } from '../approvals/shared.jsx';
 import { fmtDate, relDays, daysUntil, toCSV, download } from '../../finance.js';
 import { INVOICE_CURRENCIES, computeTotals, money, num, downloadInvoicePdf, previewInvoicePdf, buildInvoicePdf, invoiceFileName } from '../../invoicePdf.js';
 
@@ -28,6 +29,11 @@ export default function ClientInvoices({ ctx }) {
   const [companyOpen, setCompanyOpen] = useState(false);
   const [del, setDel] = useState(null);
   const [viewId, setViewId] = useState(null);
+  const [openReqs, setOpenReqs] = useState({});
+  useEffect(() => {
+    supabase.from('apr_requests').select('*').eq('flow', 'client').in('state', ['in_review', 'returned'])
+      .then(({ data }) => setOpenReqs(Object.fromEntries((data || []).map((r) => [r.invoice_id, r]))));
+  }, [invoices, ctx.apr.queue]);
 
   const rows = invoices.filter((i) => {
     if (status && outStatus(i) !== status) return false;
@@ -113,10 +119,10 @@ export default function ClientInvoices({ ctx }) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="table">
+          <table className="table fin">
             <thead><tr>
               <th scope="col">Invoice</th><th scope="col">Client</th><th scope="col">Issued</th><th scope="col">Due</th>
-              <th scope="col" className="num">Total</th><th scope="col" className="num">Balance</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th>
+              <th scope="col" className="num">Total / balance</th><th scope="col">Status</th><th scope="col">Approval</th><th scope="col"><span className="sr-only">Actions</span></th>
             </tr></thead>
             <tbody>
               {rows.map((i) => {
@@ -124,20 +130,17 @@ export default function ClientInvoices({ ctx }) {
                 return (
                   <tr key={i.id} className="clickable" onClick={() => setViewId(i.id)}>
                     <td className="nowrap"><b className="mono" style={{ fontSize: 13 }}>{i.invoice_number}</b>{i.po_number && <div className="muted xsmall">PO {i.po_number}</div>}</td>
-                    <td>{i.client_name}<div className="muted xsmall">{i.service_period || i.client_country || ''}</div></td>
+                    <td style={{ minWidth: 170 }}>{i.client_name}<div className="muted xsmall">{i.service_period || i.client_country || ''}</div></td>
                     <td className="small nowrap">{fmtDate(i.issue_date)}</td>
                     <td className="small nowrap">{fmtDate(i.due_date)}{['sent', 'partially_paid', 'overdue'].includes(st) && i.due_date && <div className={'xsmall ' + (st === 'overdue' ? 'danger' : 'muted')}>{relDays(i.due_date)}</div>}</td>
-                    <td className="num"><b>{money(i.total, i.currency)}</b></td>
-                    <td className="num">{bal > 0 && st !== 'cancelled' ? money(bal, i.currency) : <span className="faint">—</span>}</td>
+                    <td className="num"><b>{money(i.total, i.currency)}</b>{bal > 0 && st !== 'cancelled' && bal !== Number(i.total) ? <div className="xsmall muted">Balance {money(bal, i.currency)}</div> : bal <= 0 && st !== 'cancelled' ? <div className="xsmall muted">Fully paid</div> : null}</td>
                     <td><StatusPill tone={STATUS[st].tone}>{STATUS[st].label}</StatusPill></td>
+                    <td><ApprovalPill status={i.approval_status} req={openReqs[i.id]} /></td>
                     <td className="row-actions" onClick={(e) => e.stopPropagation()}>
                       <button className="btn small ghost" onClick={() => setViewId(i.id)} aria-label={`View ${i.invoice_number}`}><Icon name="eye" /> View</button>
-                      <button className="btn small ghost" onClick={() => downloadInvoicePdf(i, company)} aria-label={`Download PDF of ${i.invoice_number}`}><Icon name="download" /> PDF</button>
+                      <button className="icon-btn" title="Download PDF" onClick={() => downloadInvoicePdf(i, company)} aria-label={`Download PDF of ${i.invoice_number}`}><Icon name="download" /></button>
                       {isFinance && <>
-                        {['sent', 'partially_paid'].includes(i.status) && <button className="btn small ghost" onClick={() => markPaid(i)}>Mark paid</button>}
                         <button className="icon-btn" title="Edit" aria-label={`Edit ${i.invoice_number}`} onClick={() => setEditing(i)}><Icon name="edit" /></button>
-                        <button className="icon-btn" title="Duplicate" aria-label={`Duplicate ${i.invoice_number}`} onClick={() => setEditing({ copyOf: i })}><Icon name="copy" /></button>
-                        <button className="icon-btn danger" title="Delete" aria-label={`Delete ${i.invoice_number}`} onClick={() => setDel(i)}><Icon name="trash" /></button>
                       </>}
                     </td>
                   </tr>
@@ -150,7 +153,8 @@ export default function ClientInvoices({ ctx }) {
 
       {viewId && invoices.find((x) => x.id === viewId) && (
         <InvoiceViewer ctx={ctx} invoice={invoices.find((x) => x.id === viewId)} onClose={() => setViewId(null)}
-          onEdit={isFinance ? (inv) => { setViewId(null); setEditing(inv); } : null} onMarkPaid={isFinance ? markPaid : null} />
+          onEdit={isFinance ? (inv) => { setViewId(null); setEditing(inv); } : null} onMarkPaid={isFinance ? markPaid : null}
+          onDuplicate={isFinance ? (inv) => { setViewId(null); setEditing({ copyOf: inv }); } : null} onDelete={isFinance ? (inv) => { setViewId(null); setDel(inv); } : null} />
       )}
       {companyOpen && <CompanyDetails ctx={ctx} onClose={() => setCompanyOpen(false)} />}
       {del && (
@@ -191,6 +195,7 @@ function InvoiceEditor({ ctx, initial, onClose }) {
   const setItem = (i, k, v) => setF((p) => ({ ...p, items: p.items.map((it, j) => (j === i ? { ...it, [k]: v } : it)) }));
   const calc = computeTotals({ ...f, tax_rate: showTax ? f.tax_rate : 0, amount_paid: f.status === 'paid' ? 0 : f.amount_paid });
   const invNo = isNew ? null : src.invoice_number;
+  const needsApproval = ctx.apr.stages.some((x) => x.flow === 'client') && (isNew || src.approval_status !== 'approved') && !['sent', 'partially_paid', 'paid'].includes(src?.status && !isNew ? src.status : '');
   const [nextNo, setNextNo] = useState(null);
   useEffect(() => {
     if (!isNew || !f.issue_date) return;
@@ -298,7 +303,11 @@ function InvoiceEditor({ ctx, initial, onClose }) {
             </label>
             <label>Status
               <select value={f.status} onChange={set('status')}>
-                <option value="draft">Draft</option><option value="sent">Sent</option><option value="partially_paid">Partially paid</option><option value="paid">Paid</option><option value="cancelled">Cancelled</option>
+                <option value="draft">Draft</option>
+                <option value="sent" disabled={needsApproval}>Sent{needsApproval ? ' (needs approval)' : ''}</option>
+                <option value="partially_paid" disabled={needsApproval}>Partially paid{needsApproval ? ' (needs approval)' : ''}</option>
+                <option value="paid" disabled={needsApproval}>Paid{needsApproval ? ' (needs approval)' : ''}</option>
+                <option value="cancelled">Cancelled</option>
               </select>
             </label>
             <label>Service period<input value={f.service_period} onChange={set('service_period')} placeholder="e.g. 01–31 Oct 2026" /></label>
@@ -453,8 +462,11 @@ function CompanyDetails({ ctx, onClose }) {
 }
 
 // ---------------------------------------------------------------- read-only viewer
-function InvoiceViewer({ ctx, invoice: i, onClose, onEdit, onMarkPaid }) {
+function InvoiceViewer({ ctx, invoice: i, onClose, onEdit, onMarkPaid, onDuplicate, onDelete }) {
   const { company } = ctx.fin;
+  const [aprTick, setAprTick] = useState(0);
+  const apr = useApproval('client', i.id, `${aprTick}-${i.approval_status}`);
+  const stagesConfigured = ctx.apr.stages.some((s) => s.flow === 'client');
   const [url, setUrl] = useState(null);
   const [blob, setBlob] = useState(null);
   const frame = useRef(null);
@@ -516,8 +528,14 @@ function InvoiceViewer({ ctx, invoice: i, onClose, onEdit, onMarkPaid }) {
             <div className="vw-actions">
               {onMarkPaid && ['sent', 'partially_paid'].includes(i.status) && <button className="btn ghost" onClick={() => onMarkPaid(i)}><Icon name="check" /> Mark paid</button>}
               {onEdit && <button className="btn ghost" onClick={() => onEdit(i)}><Icon name="edit" /> Edit invoice</button>}
+              {onDuplicate && <button className="btn ghost" onClick={() => onDuplicate(i)}><Icon name="copy" /> Duplicate</button>}
+              {onDelete && <button className="btn ghost danger-text" onClick={() => onDelete(i)}><Icon name="trash" /> Delete</button>}
             </div>
           )}
+          <h4>Approval <ApprovalPill status={i.approval_status} req={apr.req && ['in_review', 'returned'].includes(apr.req.state) ? apr.req : null} /></h4>
+          <ApprovalActions flow="client" invoiceId={i.id} approvalStatus={i.approval_status} req={apr.req} me={ctx.me} isFinance={!!ctx.fin.isFinance}
+            stagesConfigured={stagesConfigured} onDone={() => { setAprTick((t) => t + 1); ctx.fin.reload(); ctx.apr.reload(); }} />
+          <ApprovalTimeline req={apr.req} events={apr.events} profiles={ctx.profiles} me={ctx.me} />
         </aside>
       </div>
     </div>
