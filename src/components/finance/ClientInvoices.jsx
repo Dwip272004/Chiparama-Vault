@@ -157,7 +157,7 @@ export default function ClientInvoices({ ctx }) {
 }
 
 // ---------------------------------------------------------------- editor
-const blankItem = () => ({ description: '', details: '', qty: 1, unit: '', rate: '' });
+const blankItem = (sac = '') => ({ sac, description: '', details: '', qty: 1, unit: '', rate: '' });
 
 function InvoiceEditor({ ctx, initial, onClose }) {
   const toast = useToast();
@@ -171,10 +171,10 @@ function InvoiceEditor({ ctx, initial, onClose }) {
     client_address: src?.client_address || '', client_country: src?.client_country || '', client_tax_id: src?.client_tax_id || '',
     issue_date: issue, due_date: isNew ? addDays(issue, dueDays) : src.due_date || '',
     currency: src?.currency || 'INR', service_period: isNew ? '' : src.service_period || '', po_number: isNew ? '' : src.po_number || '',
-    items: src?.items?.length ? src.items.map((x) => ({ ...blankItem(), ...x })) : [blankItem()],
+    items: src?.items?.length ? src.items.map((x) => ({ ...blankItem(), ...x })) : [blankItem(company?.default_sac || '')],
     discount: Number(src?.discount) ? String(src.discount) : '', tax_label: src?.tax_label || '', tax_rate: Number(src?.tax_rate) ? String(Number(src.tax_rate)) : '',
     notes: src?.notes || '', terms: src?.terms ?? company?.default_terms ?? '',
-    tnc: src?.tnc || 'none', export_lut: !!src?.export_lut, sac: src?.sac ?? company?.default_sac ?? '',
+    tnc: src?.tnc || 'none', export_lut: !!src?.export_lut,
     status: isNew ? 'draft' : src.status, amount_paid: isNew ? '' : (Number(src.amount_paid) ? String(src.amount_paid) : ''), paid_on: isNew ? '' : src.paid_on || '',
   }));
   const [saveClient, setSaveClient] = useState(true);
@@ -199,7 +199,7 @@ function InvoiceEditor({ ctx, initial, onClose }) {
   async function save(after) {
     if (!f.client_name.trim()) return toast('Add the client name', 'err');
     const items = f.items.filter((it) => it.description.trim() || Number(it.rate)).map((it) => ({
-      description: it.description.trim(), details: (it.details || '').trim(), qty: Number(it.qty) || 0, unit: (it.unit || '').trim(), rate: Number(it.rate) || 0 }));
+      sac: (it.sac || '').trim(), description: it.description.trim(), details: (it.details || '').trim(), qty: Number(it.qty) || 0, unit: (it.unit || '').trim(), rate: Number(it.rate) || 0 }));
     if (!items.length) return toast('Add at least one line item', 'err');
     if (items.some((it) => !it.description)) return toast('Every line needs a description', 'err');
     setBusy(true);
@@ -224,7 +224,7 @@ function InvoiceEditor({ ctx, initial, onClose }) {
       service_period: f.service_period || null, po_number: f.po_number || null, items, discount: Number(f.discount) || 0,
       tax_label: showTax ? f.tax_label || 'Tax' : null, tax_rate: showTax ? Number(f.tax_rate) || 0 : 0,
       notes: f.notes || null, terms: f.terms || null, status: f.status,
-      tnc: f.tnc, export_lut: f.export_lut, sac: (f.sac || '').trim() || null,
+      tnc: f.tnc, export_lut: f.export_lut,
       amount_paid: f.status === 'paid' ? calc.total : f.status === 'partially_paid' ? Number(f.amount_paid) || 0 : 0,
       paid_on: ['paid', 'partially_paid'].includes(f.status) ? f.paid_on || today() : null,
     };
@@ -300,9 +300,10 @@ function InvoiceEditor({ ctx, initial, onClose }) {
       <section className="card" style={{ marginTop: 14 }}>
         <div className="card-head"><h3>Line items</h3><span className="muted small">Amounts in {f.currency}</span></div>
         <div className="items">
-          <div className="items-head" aria-hidden="true"><span>Description</span><span>Qty</span><span>Unit</span><span>Rate</span><span className="r">Amount</span><span /></div>
+          <div className="items-head" aria-hidden="true"><span>SAC</span><span>Description</span><span>Qty</span><span>Unit</span><span>Rate</span><span className="r">Amount</span><span /></div>
           {f.items.map((it, i) => (
             <div key={i} className="items-row">
+              <input value={it.sac || ''} onChange={(e) => setItem(i, 'sac', e.target.value)} placeholder="Optional" maxLength={8} inputMode="numeric" aria-label={`Line ${i + 1} SAC code (optional)`} />
               <div className="items-desc">
                 <input value={it.description} onChange={(e) => setItem(i, 'description', e.target.value)} placeholder="Service or deliverable" aria-label={`Line ${i + 1} description`} />
                 <input className="sub" value={it.details} onChange={(e) => setItem(i, 'details', e.target.value)} placeholder="Details (optional) – e.g. 160 hours · Sep 2026 · resource name" aria-label={`Line ${i + 1} details`} />
@@ -315,7 +316,7 @@ function InvoiceEditor({ ctx, initial, onClose }) {
             </div>
           ))}
           <datalist id="units">{['Hours', 'Days', 'Months', 'Placement', 'Resource', 'Project', 'Fixed fee', 'Licence'].map((u) => <option key={u} value={u} />)}</datalist>
-          <button className="btn ghost small" style={{ marginTop: 10 }} onClick={() => setF((p) => ({ ...p, items: [...p.items, blankItem()] }))}><Icon name="plus" /> Add line</button>
+          <button className="btn ghost small" style={{ marginTop: 10 }} onClick={() => setF((p) => ({ ...p, items: [...p.items, blankItem(p.items[p.items.length - 1]?.sac || company?.default_sac || '')] }))}><Icon name="plus" /> Add line</button>
         </div>
 
         <div className="totals-grid">
@@ -350,7 +351,6 @@ function InvoiceEditor({ ctx, initial, onClose }) {
               <option value="international">Attach – international terms</option>
             </select>
           </label>
-          <label>SAC code<input value={f.sac} onChange={set('sac')} placeholder="Optional – confirm with your CA" /></label>
           <label className="check" style={{ alignSelf: 'end' }}>
             <input type="checkbox" checked={f.export_lut} onChange={(e) => setF((p) => ({ ...p, export_lut: e.target.checked }))} disabled={!foreign && !f.export_lut} />
             Foreign client – zero-rated under GST LUT
@@ -415,7 +415,7 @@ function CompanyDetails({ ctx, onClose }) {
         <p className="muted small">Used only when an invoice is marked "Foreign client – zero-rated under GST LUT", plus the signature block printed on every invoice.</p>
         <div className="form-grid">
           {field('lut_arn', 'LUT ARN (GST)', { ph: 'From your LUT acknowledgement' })}{field('lut_fy', 'LUT valid for FY', { ph: 'e.g. 2026-27' })}
-          {field('default_sac', 'Default SAC code', { ph: 'Confirm with your CA' })}<span />
+          {field('default_sac', 'Default SAC for new lines', { ph: 'Optional – confirm with your CA' })}<span />
           {field('signatory_name', 'Authorised signatory name')}{field('signatory_title', 'Designation')}
         </div>
       </div>

@@ -90,7 +90,7 @@ export function buildInvoicePdf(inv, company = {}) {
 
   // ---- header ----
   doc.setFillColor(...LIME); doc.rect(M, 14.2, 4.6, 4.6, 'F');
-  text(company.brand_name || 'chiplabs', M + 7, 18.6, { size: 17, bold: true });
+  text(company.legal_name || 'Chiplabs Solutions Pvt Ltd', M + 7, 18.6, { size: 15, bold: true });
   if (company.tagline) text(company.tagline, M + 7, 24, { size: 8, italic: true, color: GRAY });
   text('INVOICE', R, 19.5, { size: 22, bold: true, align: 'right', charSpace: 0.6 });
   text(inv.invoice_number || 'DRAFT', R, 26, { size: 10, color: GRAY, align: 'right' });
@@ -126,7 +126,6 @@ export function buildInvoicePdf(inv, company = {}) {
   let y3 = y + 5.5;
   const det = [['Invoice no.', inv.invoice_number || 'Draft'], ['Issue date', fmtDate(inv.issue_date)], ['Due date', fmtDate(inv.due_date)],
     ['Currency', `${cur} – ${INVOICE_CURRENCIES[cur]?.name || cur}`], inv.service_period && ['Service period', inv.service_period], inv.po_number && ['PO / reference', inv.po_number],
-    inv.sac && ['SAC', inv.sac],
     inv.export_lut && ['Place of supply', `Outside India${inv.client_country ? ` (${inv.client_country})` : ''}`]].filter(Boolean);
   for (const [k, v] of det) {
     text(k, c3, y3, { size: 8, color: GRAY });
@@ -145,9 +144,12 @@ export function buildInvoicePdf(inv, company = {}) {
   y += 20;
 
   // ---- items ----
-  const body = (inv.items || []).filter((it) => it.description || Number(it.rate)).map((it, i) => [
+  const shown = (inv.items || []).filter((it) => it.description || Number(it.rate));
+  const hasSac = shown.some((it) => (it.sac || '').trim());
+  const body = shown.map((it, i) => [
     String(i + 1),
-    { content: it.description + (it.details ? `\n${it.details}` : ''), styles: {} , _details: !!it.details },
+    ...(hasSac ? [it.sac || ''] : []),
+    { content: it.description + (it.details ? `\n${it.details}` : ''), _desc: it.description, _details: !!it.details },
     Number(it.qty || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }),
     it.unit || '',
     num(it.rate, cur),
@@ -155,25 +157,35 @@ export function buildInvoicePdf(inv, company = {}) {
   ]);
   autoTable(doc, {
     startY: y, margin: { left: M, right: M, bottom: 24 },
-    head: [['#', 'Description', 'Qty', 'Unit', `Rate (${cur})`, `Amount (${cur})`]],
-    body: body.length ? body : [['', 'No line items', '', '', '', '']],
+    head: [['#', ...(hasSac ? ['SAC'] : []), 'Description', 'Qty', 'Unit', `Rate (${cur})`, `Amount (${cur})`]],
+    body: body.length ? body : [['', ...(hasSac ? [''] : []), 'No line items', '', '', '', '']],
     theme: 'plain',
     styles: { font: 'helvetica', fontSize: 8.8, textColor: INK, cellPadding: { top: 2.6, bottom: 2.6, left: 2.2, right: 2.2 }, lineColor: RULE, valign: 'top' },
     headStyles: { fillColor: INK, textColor: 255, fontStyle: 'bold', fontSize: 7.8, cellPadding: { top: 2.4, bottom: 2.4, left: 2.2, right: 2.2 } },
     bodyStyles: { lineWidth: { bottom: 0.2 } },
-    columnStyles: { 0: { cellWidth: 9, halign: 'center', textColor: GRAY }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 14, halign: 'right' }, 3: { cellWidth: 20 }, 4: { cellWidth: 28, halign: 'right' }, 5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } },
-    didParseCell: (d) => { if (d.section === 'head' && d.column.index >= 4) d.cell.styles.halign = 'right'; if (d.section === 'head' && d.column.index === 2) d.cell.styles.halign = 'right'; if (d.section === 'head' && d.column.index === 0) d.cell.styles.halign = 'center'; },
+    columnStyles: hasSac
+      ? { 0: { cellWidth: 8, halign: 'center', textColor: GRAY }, 1: { cellWidth: 17, textColor: GRAY }, 2: { cellWidth: 'auto' }, 3: { cellWidth: 13, halign: 'right' }, 4: { cellWidth: 19 }, 5: { cellWidth: 26, halign: 'right' }, 6: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } }
+      : { 0: { cellWidth: 9, halign: 'center', textColor: GRAY }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 14, halign: 'right' }, 3: { cellWidth: 20 }, 4: { cellWidth: 28, halign: 'right' }, 5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } },
+    didParseCell: (d) => {
+      if (d.section !== 'head') return;
+      const k = d.column.index - (hasSac ? 1 : 0);
+      if (d.column.index === 0) d.cell.styles.halign = 'center';
+      else if (k === 2 || k >= 4) d.cell.styles.halign = 'right';
+    },
     willDrawCell: (d) => {
       // render the optional detail line of a description in smaller grey text
-      if (d.section === 'body' && d.column.index === 1 && d.cell.raw?._details) {
-        const [first, ...rest] = d.cell.text; d.cell.text = [first];
-        d.cell._rest = rest;
+      if (d.section === 'body' && d.column.index === (hasSac ? 2 : 1) && d.cell.raw?._details) {
+        doc.setFontSize(8.8);
+        const n = doc.splitTextToSize(d.cell.raw._desc, d.cell.width - 4.4).length;
+        d.cell._rest = d.cell.text.slice(n);
+        d.cell._n = n;
+        d.cell.text = d.cell.text.slice(0, n);
       }
     },
     didDrawCell: (d) => {
       if (d.cell._rest?.length) {
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7.8); doc.setTextColor(...GRAY);
-        d.cell._rest.forEach((l, i) => doc.text(l, d.cell.x + 2.2, d.cell.y + 2.6 + 3.2 + 3.8 + i * 3.4));
+        d.cell._rest.forEach((l, i) => doc.text(l, d.cell.x + 2.2, d.cell.y + 2.6 + 3.1 + d.cell._n * 3.6 + 0.4 + i * 3.4));
       }
     },
   });
@@ -251,7 +263,7 @@ export function buildInvoicePdf(inv, company = {}) {
   if (tncText) {
     doc.addPage();
     doc.setFillColor(...LIME); doc.rect(M, 14.2, 3.6, 3.6, 'F');
-    text(company.brand_name || 'chiplabs', M + 5.6, 17.6, { size: 12, bold: true });
+    text(company.legal_name || 'Chiplabs Solutions Pvt Ltd', M + 5.6, 17.6, { size: 11, bold: true });
     text('TERMS & CONDITIONS', R, 17.8, { size: 11, bold: true, align: 'right', charSpace: 0.4 });
     text(`${inv.tnc === 'international' ? 'International' : 'Domestic'} clients  ·  Invoice ${inv.invoice_number || 'Draft'}`, R, 23, { size: 8, color: GRAY, align: 'right' });
     doc.setDrawColor(...INK); doc.setLineWidth(0.5); doc.line(M, 28, R, 28);
