@@ -73,6 +73,15 @@ const fmtDate = (s) => (s ? new Date(s + 'T00:00:00').toLocaleDateString('en-GB'
 // ---------- PDF ----------
 const INK = [17, 17, 17], GRAY = [100, 102, 108], LIGHT = [150, 152, 158], RULE = [222, 222, 218], BAND = [246, 243, 237], LIME = [200, 240, 40];
 
+export const PAYMENT_BANKS = { auto: 'Automatic', india: 'Indian account', us: 'US account (ACH & Fedwire)', both: 'Both accounts' };
+export const hasUsBank = (c) => !!(c?.us_account_number || c?.us_ach_routing || c?.us_fedwire_routing);
+// 'auto' prints the US account on USD invoices (when it is set up) and the Indian account otherwise.
+export function resolvePaymentBank(inv, company) {
+  const m = inv.payment_bank || 'auto';
+  if (m !== 'auto') return m === 'us' && !hasUsBank(company) ? 'india' : m;
+  return inv.currency === 'USD' && hasUsBank(company) ? 'us' : 'india';
+}
+
 export function buildInvoicePdf(inv, company = {}) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const W = 210, M = 16, R = W - M;
@@ -228,11 +237,18 @@ export function buildInvoicePdf(inv, company = {}) {
   }
 
   // ---- payment + notes ----
-  const bank = [['Account name', company.bank_account_name], ['Bank', company.bank_name], ['Branch', company.bank_branch], ['Account no.', company.bank_account_no], ['IFSC', company.bank_ifsc], ['SWIFT / BIC', company.bank_swift]].filter(([, v]) => v);
+  const mode = resolvePaymentBank(inv, company);
+  const inBank = [['Account name', company.bank_account_name], ['Bank', company.bank_name], ['Branch', company.bank_branch], ['Account no.', company.bank_account_no], ['IFSC', company.bank_ifsc], ['SWIFT / BIC', company.bank_swift]].filter(([, v]) => v);
+  const usBank = [['Beneficiary', company.us_beneficiary], ['Account no.', company.us_account_number], ['ACH routing', company.us_ach_routing], ['Fedwire ABA', company.us_fedwire_routing], ['Account type', company.us_account_type], ['Bank', company.us_bank_name], ['Bank address', company.us_bank_address]].filter(([, v]) => v);
+  // rows: [label, value] or ['#', heading]
+  const bank = mode === 'us' ? [['#', 'Bank transfer – ACH and Fedwire'], ...usBank]
+    : mode === 'both' ? [...(inBank.length ? [['#', 'India (NEFT / RTGS / SWIFT)'], ...inBank] : []), ...(cur !== 'INR' && company.intl_payment_note ? [['~', company.intl_payment_note]] : []), ...(usBank.length ? [['#', 'US – ACH and Fedwire'], ...usBank] : [])]
+    : inBank;
+  const valLines = (k, v) => (k === '#' ? [v] : k === '~' ? wrap(v, 90, 7.8) : wrap(v, 66, 8.2));
   const tncText = inv.tnc === 'domestic' ? company.terms_domestic : inv.tnc === 'international' ? company.terms_international : '';
   const notes = [inv.notes, inv.terms, tncText && 'This invoice is subject to the Terms & Conditions on the following page.'].filter(Boolean).join('\n\n');
-  const intl = cur !== 'INR' && company.intl_payment_note ? company.intl_payment_note : '';
-  const leftH = bank.length * 4.6 + (intl ? wrap(intl, 78, 7.8).length * 3.6 + 3 : 0);
+  const intl = cur !== 'INR' && mode === 'india' && company.intl_payment_note ? company.intl_payment_note : '';
+  const leftH = bank.reduce((h, [k, v]) => h + valLines(k, v).length * 4.2 + (k === '#' ? 1.6 : 0.4), 0) + (intl ? wrap(intl, 78, 7.8).length * 3.6 + 3 : 0);
   const rightLines = wrap(notes, 78, 8.2);
   const boxH = Math.max(leftH, rightLines.length * 3.9) + 12;
   if (y + boxH > 297 - 24) { doc.addPage(); y = 20; }
@@ -240,7 +256,13 @@ export function buildInvoicePdf(inv, company = {}) {
   label('Payment details', M, y + 6);
   let by = y + 11;
   if (bank.length) {
-    for (const [k, v] of bank) { text(k, M, by, { size: 8.2, color: GRAY }); text(v, M + 24, by, { size: 8.2, bold: k === 'Account no.' }); by += 4.6; }
+    bank.forEach(([k, v], idx) => {
+      if (k === '#') { if (idx) by += 1.6; text(v, M, by, { size: 8.2, bold: true }); by += 4.6; return; }
+      if (k === '~') { valLines(k, v).forEach((l) => { text(l, M, by, { size: 7.8, color: GRAY }); by += 3.6; }); by += 0.6; return; }
+      text(k, M, by, { size: 8.2, color: GRAY });
+      valLines(k, v).forEach((l, li) => text(l, M + 24, by + li * 4.2, { size: 8.2, bold: k === 'Account no.' }));
+      by += valLines(k, v).length * 4.2 + 0.4;
+    });
   } else { text('Bank details not set. Add them in Company details.', M, by, { size: 8.2, color: LIGHT, italic: true }); by += 4.6; }
   if (intl) { by += 1; wrap(intl, 78, 7.8).forEach((l) => { text(l, M, by, { size: 7.8, color: GRAY }); by += 3.6; }); }
   if (notes) {

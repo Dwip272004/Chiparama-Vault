@@ -5,7 +5,7 @@ import { StatusPill } from './charts.jsx';
 import PdfPages from './PdfPages.jsx';
 import { ApprovalPill, ApprovalTimeline, ApprovalActions, useApproval } from '../approvals/shared.jsx';
 import { fmtDate, relDays, daysUntil, toCSV, download } from '../../finance.js';
-import { INVOICE_CURRENCIES, computeTotals, money, num, downloadInvoicePdf, previewInvoicePdf, buildInvoicePdf, invoiceFileName } from '../../invoicePdf.js';
+import { INVOICE_CURRENCIES, computeTotals, money, num, downloadInvoicePdf, previewInvoicePdf, buildInvoicePdf, invoiceFileName, hasUsBank, resolvePaymentBank } from '../../invoicePdf.js';
 
 const STATUS = {
   draft: { label: 'Draft', tone: 'neutral' }, sent: { label: 'Sent', tone: 'info' }, partially_paid: { label: 'Part paid', tone: 'warning' },
@@ -185,7 +185,7 @@ function InvoiceEditor({ ctx, initial, onClose }) {
     items: src?.items?.length ? src.items.map((x) => ({ ...blankItem(), ...x })) : [blankItem(company?.default_sac || '')],
     discount: Number(src?.discount) ? String(src.discount) : '', tax_label: src?.tax_label || '', tax_rate: Number(src?.tax_rate) ? String(Number(src.tax_rate)) : '',
     notes: src?.notes || '', terms: src?.terms ?? company?.default_terms ?? '',
-    tnc: src?.tnc || 'none', export_lut: !!src?.export_lut,
+    tnc: src?.tnc || 'none', export_lut: !!src?.export_lut, payment_bank: src?.payment_bank || 'auto',
     status: isNew ? 'draft' : src.status, amount_paid: isNew ? '' : (Number(src.amount_paid) ? String(src.amount_paid) : ''), paid_on: isNew ? '' : src.paid_on || '',
   }));
   const [saveClient, setSaveClient] = useState(true);
@@ -241,7 +241,7 @@ function InvoiceEditor({ ctx, initial, onClose }) {
       service_period: f.service_period || null, po_number: f.po_number || null, items, discount: Number(f.discount) || 0,
       tax_label: showTax ? f.tax_label || 'Tax' : null, tax_rate: showTax ? Number(f.tax_rate) || 0 : 0,
       notes: f.notes || null, terms: f.terms || null, status: f.status,
-      tnc: f.tnc, export_lut: f.export_lut,
+      tnc: f.tnc, export_lut: f.export_lut, payment_bank: f.payment_bank,
       amount_paid: f.status === 'paid' ? calc.total : f.status === 'partially_paid' ? Number(f.amount_paid) || 0 : 0,
       paid_on: ['paid', 'partially_paid'].includes(f.status) ? f.paid_on || today() : null,
     };
@@ -376,7 +376,16 @@ function InvoiceEditor({ ctx, initial, onClose }) {
             <input type="checkbox" checked={f.export_lut} onChange={(e) => setF((p) => ({ ...p, export_lut: e.target.checked }))} disabled={!foreign && !f.export_lut} />
             Foreign client – zero-rated under GST LUT
           </label>
+          <label>Bank details on invoice
+            <select value={f.payment_bank} onChange={set('payment_bank')}>
+              <option value="auto">Automatic – {f.currency === 'USD' && hasUsBank(company) ? 'US account (USD)' : 'Indian account'}</option>
+              <option value="india">Indian account</option>
+              <option value="us" disabled={!hasUsBank(company)}>US account – ACH &amp; Fedwire</option>
+              <option value="both">Both accounts</option>
+            </select>
+          </label>
         </div>
+        {['us', 'both'].includes(f.payment_bank) && !hasUsBank(company) && <div className="note err" style={{ marginTop: 10 }}>No US bank account saved yet. Add the ACH / Fedwire details under Company details.</div>}
         {foreign && f.tnc === 'none' && <p className="muted small" style={{ marginTop: 10 }}>Foreign client: you can attach the international terms (bank charges, FX, withholding tax). <button className="link-btn" onClick={() => setF((p) => ({ ...p, tnc: 'international' }))}>Attach them</button></p>}
         {f.tnc !== 'none' && !tncText && <div className="note err" style={{ marginTop: 10 }}>The {f.tnc} terms template is empty. Add it under Company details, or the page won't be printed.</div>}
         {f.tnc !== 'none' && tncText.includes('[') && <div className="note err" style={{ marginTop: 10 }}>The {f.tnc} terms still contain [placeholders]. Fill them in under Company details before sending this invoice.</div>}
@@ -430,6 +439,18 @@ function CompanyDetails({ ctx, onClose }) {
           {field('bank_ifsc', 'IFSC')}{field('bank_swift', 'SWIFT / BIC (international)')}
           {field('intl_payment_note', 'Note shown on foreign-currency invoices', { area: true, span: true })}
         </div>
+      </div>
+      <div className="section-box">
+        <div className="section-title"><Icon name="card" /> Bank transfer details – ACH and Fedwire (US)</div>
+        <p className="muted small">For clients paying in USD from the US. Printed automatically on USD invoices once filled in; you can also pick it per invoice.</p>
+        <div className="form-grid">
+          {field('us_beneficiary', 'Beneficiary')}{field('us_account_number', 'Account number')}
+          {field('us_ach_routing', '[ACH] Routing number', { ph: '9 digits' })}{field('us_fedwire_routing', '[Fedwire] ABA code / routing number', { ph: '9 digits' })}
+          <label>Account type<select value={f.us_account_type || ''} onChange={set('us_account_type')} disabled={!isFinance}><option value="">—</option><option>Checking</option><option>Savings</option><option>Business Checking</option></select></label>
+          {field('us_bank_name', 'Bank name')}
+          {field('us_bank_address', 'Bank address', { area: true, span: true })}
+        </div>
+        {[f.us_ach_routing, f.us_fedwire_routing].some((v) => v && !/^\d{9}$/.test(String(v).replace(/\s/g, ''))) && <div className="note err" style={{ marginTop: 8 }}>US routing numbers are 9 digits – please double-check.</div>}
       </div>
       <div className="section-box">
         <div className="section-title"><Icon name="shield" /> Compliance</div>
@@ -523,6 +544,7 @@ function InvoiceViewer({ ctx, invoice: i, onClose, onEdit, onMarkPaid, onDuplica
           {row('Paid on', i.paid_on ? fmtDate(i.paid_on) : null)}
           {row('T&C page', i.tnc && i.tnc !== 'none' ? (i.tnc === 'international' ? 'International' : 'Domestic') : null)}
           {row('GST export (LUT)', i.export_lut ? 'Yes' : null)}
+          {row('Bank details', { india: 'Indian account', us: 'US – ACH & Fedwire', both: 'Indian + US accounts' }[resolvePaymentBank(i, company || {})])}
           {(i.updated_at || i.created_at) && <p className="muted xsmall" style={{ marginTop: 14 }}>Last updated {fmtDate(String(i.updated_at || i.created_at).slice(0, 10))}{by ? ` by ${by.full_name || by.email}` : ''}</p>}
           {(onEdit || onMarkPaid) && (
             <div className="vw-actions">
