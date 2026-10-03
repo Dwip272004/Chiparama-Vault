@@ -31,6 +31,7 @@ const paths = {
   download: <><path d="M12 4v12M6 10l6 6 6-6M4 20h16" /></>,
   file: <><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5z" /><path d="M14 3v5h5" /></>,
   chevron: <><path d="M8 10l4 4 4-4" /></>,
+  bell: <><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></>,
   chevronUp: <><path d="M8 14l4-4 4 4" /></>,
   arrowRight: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
   dice: <><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8.5" cy="8.5" r="1" fill="currentColor" /><circle cx="15.5" cy="15.5" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /></>,

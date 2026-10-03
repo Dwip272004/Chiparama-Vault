@@ -14,6 +14,7 @@ import ClientInvoices, { outStatus } from './components/finance/ClientInvoices.j
 import { invStatus } from './finance.js';
 import Approvals from './components/approvals/Approvals.jsx';
 import ApprovalStages from './components/approvals/ApprovalStages.jsx';
+import NotificationBell from './components/Notifications.jsx';
 
 export default function App() {
   const [session, setSession] = useState(undefined);
@@ -35,6 +36,7 @@ function Shell({ session }) {
 
   const isAdmin = !!me && me.active && ADMIN_ROLES.includes(me.role);
   const [apr, setApr] = useState({ stages: [], queue: [], isApprover: false });
+  const [aprOpen, setAprOpen] = useState(null);
   const loadApr = useCallback(async () => {
     const [stages, queue, isApprover] = await Promise.all([
       supabase.from('apr_stages').select('*').order('position'),
@@ -42,6 +44,7 @@ function Shell({ session }) {
       supabase.rpc('apr_is_any_approver'),
     ]);
     setApr({ stages: stages.data || [], queue: queue.data || [], isApprover: !!isApprover.data });
+    return queue.data || [];
   }, []);
 
   const load = useCallback(async () => {
@@ -59,8 +62,8 @@ function Shell({ session }) {
       items: items.data || [], profiles: profiles.data || [], teams: teams.data || [],
       teamMembers: teamMembers.data || [], access: access.data || [],
     });
-    const [f] = await Promise.all([loadFin(), loadApr()]);
-    setView((v) => v || (f.canView && !(items.data || []).length ? 'spend' : 'vault'));
+    const [f, q] = await Promise.all([loadFin(), loadApr()]);
+    setView((v) => v || (q?.length ? 'approvals' : f.canView && !(items.data || []).length ? 'spend' : 'vault'));
     setLoading(false);
   }, [session.user.id]); // eslint-disable-line
 
@@ -123,10 +126,8 @@ function Shell({ session }) {
       { id: 'activity', label: 'Activity log', icon: 'activity' },
       { id: 'stages', label: 'Approval stages', icon: 'shield' },
     ] : []),
-    ...(apr.isApprover || fin.canView || isAdmin ? [
-      { section: 'Approvals' },
-      { id: 'approvals', label: 'Invoice approvals', icon: 'check', count: apr.queue.length || null, alert: apr.queue.length > 0 },
-    ] : []),
+    { section: 'Approvals' },
+    { id: 'approvals', label: 'Invoice approvals', icon: 'check', count: apr.queue.length || null, alert: apr.queue.length > 0 },
     ...(fin.canView ? [
       { section: 'Finance' },
       { id: 'spend', label: 'Overview', icon: 'chart' },
@@ -136,6 +137,7 @@ function Shell({ session }) {
     ] : []),
   ];
 
+  const openApproval = (id) => { setAprOpen(id || null); setView('approvals'); };
   const ctx = { me, isAdmin, ...data, reload: load, fin: { ...fin, reload: loadFin }, apr: { ...apr, reload: loadApr } };
 
   return (
@@ -144,7 +146,8 @@ function Shell({ session }) {
       <aside className="sidebar" aria-label="Primary">
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">C</div>
-          <div><b>Chiplabs</b><span>Workspace</span></div>
+          <div className="grow"><b>Chiplabs</b><span>Workspace</span></div>
+          <NotificationBell ctx={ctx} onOpenApproval={openApproval} />
         </div>
         <nav aria-label="Main navigation">
           {nav.map((n, i) => n.section
@@ -160,13 +163,20 @@ function Shell({ session }) {
         <AccountMenu me={me} email={session.user.email} />
       </aside>
       <main className="main" id="main" tabIndex={-1}>
+        {apr.queue.length > 0 && view !== 'approvals' && (
+          <div className="action-banner" role="status">
+            <Icon name="bell" />
+            <span><b>{apr.queue.length} invoice{apr.queue.length > 1 ? 's are' : ' is'} waiting for your approval.</b> {apr.queue.slice(0, 2).map((r) => r.invoice_label.split(' · ')[0]).join(', ')}{apr.queue.length > 2 ? '…' : ''}</span>
+            <button className="btn small primary" onClick={() => openApproval(apr.queue.length === 1 ? apr.queue[0].id : null)}>Review now</button>
+          </div>
+        )}
         {view === 'vault' && <Vault ctx={ctx} />}
         {isAdmin && view === 'items' && <AdminItems ctx={ctx} />}
         {isAdmin && view === 'members' && <Members ctx={ctx} />}
         {isAdmin && view === 'twofa' && <TwoFAMap ctx={ctx} />}
         {isAdmin && view === 'activity' && <Activity ctx={ctx} />}
         {isAdmin && view === 'stages' && <ApprovalStages ctx={ctx} />}
-        {view === 'approvals' && <Approvals ctx={ctx} />}
+        {view === 'approvals' && <Approvals ctx={ctx} openId={aprOpen} onOpened={() => setAprOpen(null)} />}
         {fin.canView && view === 'spend' && <Overview ctx={ctx} go={setView} />}
         {fin.canView && view === 'subs' && <Subscriptions ctx={ctx} />}
         {fin.canView && view === 'invoices' && <Invoices ctx={ctx} />}

@@ -13,7 +13,7 @@ const STATE = {
   approved: { label: 'Approved', tone: 'good' }, withdrawn: { label: 'Withdrawn', tone: 'neutral' },
 };
 
-export default function Approvals({ ctx }) {
+export default function Approvals({ ctx, openId: requestedId, onOpened }) {
   const [tab, setTab] = useState('mine');
   const [rows, setRows] = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -24,6 +24,9 @@ export default function Approvals({ ctx }) {
     setRows(data || []);
   }
   useEffect(() => { load(); }, [ctx.apr.queue]); // eslint-disable-line
+  useEffect(() => {
+    if (requestedId && rows) { setOpenId(requestedId); onOpened?.(); }
+  }, [requestedId, rows]); // eslint-disable-line
 
   const mine = (rows || []).filter((r) => r.state === 'in_review' && isMyStage(r.stages[r.current_index], ctx.me));
   const lists = {
