@@ -6,7 +6,7 @@ import { FLOW_LABELS } from './approvals/shared.jsx';
 
 // Bell + panel available to every signed-in user.
 // Shows invoices waiting for *your* approval (with one-click approve) and your recent notifications.
-export default function NotificationBell({ ctx, onOpenApproval }) {
+export default function NotificationBell({ ctx, onOpenApproval, onOpenPayInvoice }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
@@ -26,11 +26,11 @@ export default function NotificationBell({ ctx, onOpenApproval }) {
     load();
     const ch = supabase.channel(`notif-${me.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${me.id}` }, (payload) => {
-        load(); ctx.apr.reload();
+        load(); ctx.apr.reload(); ctx.people?.reload?.();
         if (payload.new?.title) toast(payload.new.title);
       })
       .subscribe();
-    const refresh = () => { load(); ctx.apr.reload(); };
+    const refresh = () => { load(); ctx.apr.reload(); ctx.people?.reload?.(); };
     const t = setInterval(refresh, 60000);
     window.addEventListener('focus', refresh);
     return () => { supabase.removeChannel(ch); clearInterval(t); window.removeEventListener('focus', refresh); };
@@ -115,7 +115,11 @@ export default function NotificationBell({ ctx, onOpenApproval }) {
             <div className="bell-section">Recent</div>
             {items.length === 0 ? <p className="bell-empty">No notifications yet.</p> : items.map((n) => (
               <button key={n.id} className={'bell-item' + (n.read_at ? '' : ' unread')}
-                onClick={() => (n.entity_type === 'apr_request' ? openReq(n.entity_id) : markRead([n.id]))}>
+                onClick={() => {
+                  if (n.entity_type === 'apr_request') return openReq(n.entity_id);
+                  markRead([n.id]);
+                  if (n.entity_type === 'pay_invoice' && onOpenPayInvoice) { setOpen(false); onOpenPayInvoice(n.entity_id); }
+                }}>
                 {!n.read_at && <i className="bell-dot" aria-label="Unread" />}
                 <span className="grow">
                   <b>{n.title}</b>

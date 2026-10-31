@@ -15,6 +15,9 @@ import { invStatus } from './finance.js';
 import Approvals from './components/approvals/Approvals.jsx';
 import ApprovalStages from './components/approvals/ApprovalStages.jsx';
 import NotificationBell from './components/Notifications.jsx';
+import MyProfile from './components/people/MyProfile.jsx';
+import People from './components/people/People.jsx';
+import MonthlyInvoices from './components/people/MonthlyInvoices.jsx';
 
 export default function App() {
   const [session, setSession] = useState(undefined);
@@ -37,6 +40,18 @@ function Shell({ session }) {
   const isAdmin = !!me && me.active && ADMIN_ROLES.includes(me.role);
   const [apr, setApr] = useState({ stages: [], queue: [], isApprover: false });
   const [aprOpen, setAprOpen] = useState(null);
+  const [people, setPeople] = useState({ isApprover: false, canManage: false, pending: 0 });
+  const [pinvOpen, setPinvOpen] = useState(null);
+  const loadPeople = useCallback(async () => {
+    const [a, m] = await Promise.all([supabase.rpc('pay_inv_is_approver'), supabase.rpc('people_can_manage')]);
+    let pending = 0;
+    if (a.data) {
+      const { count } = await supabase.from('pay_invoices').select('id', { count: 'exact', head: true }).eq('status', 'submitted').neq('user_id', session.user.id);
+      pending = count || 0;
+    }
+    setPeople({ isApprover: !!a.data, canManage: !!m.data, pending });
+    return pending;
+  }, [session.user.id]);
   const loadApr = useCallback(async () => {
     const [stages, queue, isApprover] = await Promise.all([
       supabase.from('apr_stages').select('*').order('position'),
@@ -62,8 +77,8 @@ function Shell({ session }) {
       items: items.data || [], profiles: profiles.data || [], teams: teams.data || [],
       teamMembers: teamMembers.data || [], access: access.data || [],
     });
-    const [f, q] = await Promise.all([loadFin(), loadApr()]);
-    setView((v) => v || (q?.length ? 'approvals' : f.canView && !(items.data || []).length ? 'spend' : 'vault'));
+    const [f, q, pp] = await Promise.all([loadFin(), loadApr(), loadPeople()]);
+    setView((v) => v || (q?.length ? 'approvals' : pp ? 'monthly' : f.canView && !(items.data || []).length ? 'spend' : 'vault'));
     setLoading(false);
   }, [session.user.id]); // eslint-disable-line
 
@@ -123,20 +138,25 @@ function Shell({ session }) {
   const pendingCount = data.profiles.filter((p) => !p.active).length;
   const unpaid = fin.invoices.filter((i) => invStatus(i) === 'overdue').length;
   const clientOverdue = fin.clientInvoices.filter((i) => outStatus(i) === 'overdue').length;
+  const showMonthly = people.isApprover || fin.isFinance || fin.canViewPayroll;
   const nav = [
     { id: 'vault', label: 'Passwords', icon: 'lock', count: data.items.length },
+    { id: 'me', label: 'My profile', icon: 'user' },
     ...(isAdmin ? [
       { section: 'Administration' },
+      { id: 'people', label: 'People', icon: 'users' },
       { id: 'items', label: 'Manage logins', icon: 'key' },
-      { id: 'members', label: 'Members', icon: 'users', count: pendingCount || null, alert: pendingCount > 0 },
+      { id: 'members', label: 'Members', icon: 'key', count: pendingCount || null, alert: pendingCount > 0 },
       { id: 'twofa', label: '2FA holders', icon: 'phone' },
       { id: 'activity', label: 'Activity log', icon: 'activity' },
       { id: 'stages', label: 'Approval stages', icon: 'shield' },
     ] : []),
     { section: 'Approvals' },
     { id: 'approvals', label: 'Invoice approvals', icon: 'check', count: apr.queue.length || null, alert: apr.queue.length > 0 },
+    ...(showMonthly ? [{ id: 'monthly', label: 'Monthly invoices', icon: 'receipt', count: people.pending || null, alert: people.pending > 0 }] : []),
+    ...(fin.canView || (people.canManage && !isAdmin) ? [{ section: 'Finance' }] : []),
+    ...(people.canManage && !isAdmin ? [{ id: 'people', label: 'People', icon: 'users' }] : []),
     ...(fin.canView ? [
-      { section: 'Finance' },
       { id: 'spend', label: 'Overview', icon: 'chart' },
       { id: 'billing', label: 'Client invoices', icon: 'file', count: clientOverdue || null, alert: clientOverdue > 0 },
       { id: 'subs', label: fin.canViewPayroll ? 'Subs & salaries' : 'Subscriptions', icon: 'card', count: fin.subs.filter((s) => ['active', 'trial'].includes(s.status)).length || null },
@@ -145,7 +165,12 @@ function Shell({ session }) {
   ];
 
   const openApproval = (id) => { setAprOpen(id || null); setView('approvals'); };
-  const ctx = { me, isAdmin, ...data, reload: load, fin: { ...fin, reload: loadFin }, apr: { ...apr, reload: loadApr } };
+  const openPayInvoice = async (id) => {
+    const { data: r } = await supabase.from('pay_invoices').select('user_id').eq('id', id).maybeSingle();
+    setPinvOpen(id);
+    setView(r && r.user_id !== me.id && showMonthly ? 'monthly' : 'me');
+  };
+  const ctx = { me, isAdmin, ...data, reload: load, fin: { ...fin, reload: loadFin }, apr: { ...apr, reload: loadApr }, people: { ...people, reload: loadPeople } };
 
   return (
     <div className="layout">
@@ -154,7 +179,7 @@ function Shell({ session }) {
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">C</div>
           <div className="grow"><b>Chiplabs</b><span>Workspace</span></div>
-          <NotificationBell ctx={ctx} onOpenApproval={openApproval} />
+          <NotificationBell ctx={ctx} onOpenApproval={openApproval} onOpenPayInvoice={openPayInvoice} />
         </div>
         <nav aria-label="Main navigation">
           {nav.map((n, i) => n.section
@@ -177,7 +202,17 @@ function Shell({ session }) {
             <button className="btn small primary" onClick={() => openApproval(apr.queue.length === 1 ? apr.queue[0].id : null)}>Review now</button>
           </div>
         )}
+        {people.pending > 0 && view !== 'monthly' && !(apr.queue.length > 0 && view !== 'approvals') && (
+          <div className="action-banner" role="status">
+            <Icon name="receipt" />
+            <span><b>{people.pending} monthly invoice{people.pending > 1 ? 's are' : ' is'} waiting for your approval.</b></span>
+            <button className="btn small primary" onClick={() => setView('monthly')}>Review now</button>
+          </div>
+        )}
         {view === 'vault' && <Vault ctx={ctx} />}
+        {view === 'me' && <MyProfile ctx={ctx} openId={pinvOpen} onOpened={() => setPinvOpen(null)} />}
+        {(isAdmin || people.canManage) && view === 'people' && <People ctx={ctx} />}
+        {showMonthly && view === 'monthly' && <MonthlyInvoices ctx={ctx} openId={pinvOpen} onOpened={() => setPinvOpen(null)} />}
         {isAdmin && view === 'items' && <AdminItems ctx={ctx} />}
         {isAdmin && view === 'members' && <Members ctx={ctx} />}
         {isAdmin && view === 'twofa' && <TwoFAMap ctx={ctx} />}
